@@ -1,0 +1,7 @@
+airsim
+numpy
+opencv-python
+matplotlib
+stable-baselines3
+torch
+gymnasium

@@ -1,0 +1,16 @@
+
+
+.venv/
+venv/
+autonomousflight/venv/
+
+domain/
+
+
+__pycache__/
+*.pyc
+
+
+autonomousflight/logs/
+autonomousflight/models/
+autonomousflight/output/
