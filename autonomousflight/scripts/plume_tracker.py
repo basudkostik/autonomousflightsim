@@ -53,6 +53,11 @@ MAX_TRACKING_TIME = 90             # Safety timeout (seconds)
 # Smoke density threshold to trigger PPO handoff
 PPO_HANDOFF_DENSITY = 0.15        # 15% smoke coverage → hand to PPO
 
+# Minimum tracking steps before PPO handoff is allowed
+# Ensures the drone actually descends and tracks before handing off
+# even when smoke density is already high on entry
+MIN_STEPS_BEFORE_PPO_HANDOFF = 8
+
 # HSV range for smoke detection
 SMOKE_HSV_LOWER = np.array([0, 0, 150])
 SMOKE_HSV_UPPER = np.array([180, 50, 255])
@@ -69,18 +74,22 @@ class PlumeTracker:
     """
 
     def __init__(self, client, start_altitude=START_ALTITUDE,
-                 descent_rate=DESCENT_RATE, speed=TRACKING_SPEED):
+                 descent_rate=DESCENT_RATE, speed=TRACKING_SPEED,
+                 bearing=0.0):
         """
         Args:
-            client: airsim.MultirotorClient (already connected)
+            client:         airsim.MultirotorClient (already connected)
             start_altitude: Starting Z coordinate (negative = up)
-            descent_rate: Meters to descend per tracking step
-            speed: Tracking speed in m/s
+            descent_rate:   Meters to descend per tracking step
+            speed:          Tracking speed in m/s
+            bearing:        Tower bearing angle passed from BearingNavigator
+                            (forwarded to PPO training env as navigation hint)
         """
         self.client = client
         self.current_altitude = start_altitude
         self.descent_rate = descent_rate
         self.speed = speed
+        self.bearing = bearing       # tower bearing — forwarded to PPO env
 
         self.transition_to_ppo = False
         self.fire_detected = False
@@ -257,6 +266,106 @@ class PlumeTracker:
         self.flight_log.append(entry)
         return entry
 
+    def _chain_to_ppo_training(self):
+        """
+        Chain to Phase C: train a PPO model on-site at the actual fire location.
+
+        This replaces loading a pre-trained model. Instead:
+          ─ The drone is already near the fire (Phase B left it here)
+          ─ We create AirSimFireEnv with the KNOWN fire position
+          ─ PPO trains directly against this live scene
+          ─ No tower re-detection, no map generation, no conflicts
+          ─ Model saved to models/ppo_forest_final.zip when done
+
+        The environment's reset() only relocates the drone — it does not
+        re-run the tower or the Phase A/B pipeline.
+        """
+        from ppo_environment import AirSimFireEnv
+        from stable_baselines3 import PPO
+        from stable_baselines3.common.vec_env import DummyVecEnv
+        from stable_baselines3.common.monitor import Monitor
+        from stable_baselines3.common.callbacks import CheckpointCallback
+
+        # Stabilize drone before handing off to PPO environment
+        print("\n  🔄 Stabilizing drone before PPO handoff...", flush=True)
+        try:
+            self.client.hoverAsync().join()
+        except Exception:
+            pass
+        time.sleep(1.0)  # Let AirSim physics settle
+
+        # Ensure API control is still active after hover
+        self.client.enableApiControl(True)
+        self.client.armDisarm(True)
+        time.sleep(0.3)
+
+        x, y, z = self.get_position()
+        model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+        os.makedirs(model_dir, exist_ok=True)
+
+        print("\n" + "=" * 55)
+        print("  🧠 PHASE C — PPO ON-SITE TRAINING")
+        print("=" * 55)
+        print(f"  📍 Fire estimate  : ({x:.1f}, {y:.1f}) m  (current drone position)")
+        print(f"  🎯 Tower bearing   : {self.bearing:.1f}°")
+        print(f"  📁 Model output    : {model_dir}/ppo_forest_final.zip")
+        print("-" * 55)
+
+        # Create environment — fire position already known, no tower/map-gen
+        # is_chained=True tells the env the drone is already airborne
+        def make_env():
+            env = AirSimFireEnv(
+                fire_x=x,
+                fire_y=y,
+                tower_bearing=self.bearing,
+                is_chained=True
+            )
+            return Monitor(env)
+
+        env = DummyVecEnv([make_env])
+
+        # Build PPO model
+        model = PPO(
+            "MultiInputPolicy",
+            env,
+            learning_rate=3e-4,
+            n_steps=512,
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            ent_coef=0.01,
+            verbose=1,
+        )
+
+        checkpoint = CheckpointCallback(
+            save_freq=2000,
+            save_path=model_dir,
+            name_prefix="ppo_chain"
+        )
+
+        print("\n  🚀 Training started — press Ctrl+C to stop early and save")
+        total_steps = 50000
+        try:
+            model.learn(total_timesteps=total_steps, callback=checkpoint, progress_bar=True)
+            print(f"\n  ✅ Training complete ({total_steps:,} steps)")
+        except KeyboardInterrupt:
+            print("\n  ⛔ Training interrupted — saving current weights...")
+
+        model_path = os.path.join(model_dir, "ppo_forest_final")
+        model.save(model_path)
+        print(f"  💾 Model saved → {model_path}.zip")
+
+        env.close()
+
+        return {
+            "fire_confirmed": True,
+            "reason": "ppo_training_complete",
+            "position": (x, y, z),
+            "model_path": f"{model_path}.zip"
+        }
+
     def track_plume(self):
         """
         Main plume tracking loop.
@@ -360,8 +469,10 @@ class PlumeTracker:
                     debug_img
                 )
 
-            # Check PPO handoff
-            if self.should_transition_to_ppo():
+            # Check PPO handoff → chain to Phase C
+            # Guard: must run MIN_STEPS_BEFORE_PPO_HANDOFF steps first
+            # Prevents instant handoff when entering Phase B with high smoke density
+            if step >= MIN_STEPS_BEFORE_PPO_HANDOFF and self.should_transition_to_ppo():
                 reason_parts = []
                 if self.current_altitude >= MIN_ALTITUDE:
                     reason_parts.append("altitude_low")
@@ -376,19 +487,9 @@ class PlumeTracker:
                 print(f"  🌡️ Smoke density: {self.last_smoke_density * 100:.2f}%")
                 print(f"  📡 Altitude: {abs(self.current_altitude):.1f}m AGL")
 
-                # Hover for smooth transition
                 self.client.hoverAsync().join()
-
                 self.transition_to_ppo = True
-                return {
-                    "reason": reason,
-                    "position": self.get_position(),
-                    "smoke_density": self.last_smoke_density,
-                    "fire_visible": self.fire_detected,
-                    "altitude": self.current_altitude,
-                    "elapsed": elapsed,
-                    "step": step
-                }
+                return self._chain_to_ppo_training()
 
             time.sleep(STEP_DURATION * 0.5)
 

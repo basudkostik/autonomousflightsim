@@ -83,15 +83,15 @@ def run_main_mission():
     time.sleep(1)
     
     # Now command the absolute altitude using the tested moveToZAsync
-    print("   🛫 Climbing to safe cruise altitude Z: -20.0m...")
-    client.moveToZAsync(-20.0, 5) # Async background call! No join()
+    print("   🛫 Climbing to safe cruise altitude Z: -5.0m...")
+    client.moveToZAsync(-5.0, 5) # Async background call! No join()
     
     # Monitor progress live so we can see if it's stuck!
     climb_start = time.time()
     while time.time() - climb_start < 15:
         current_z = client.getMultirotorState().kinematics_estimated.position.z_val
         print(f"   [Debug Z] Climbing... Current Z: {current_z:.2f}m")
-        if current_z <= -18.0: # Negative is UP! Close enough
+        if current_z <= -3.0: # Negative is UP! Close enough
             print("   ✅ Reached initial climb altitude!")
             break
         time.sleep(1)

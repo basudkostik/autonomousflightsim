@@ -4,13 +4,20 @@ Phase C — PPO Training Script
 Train a PPO agent using Stable-Baselines3 to navigate under canopy
 and find/confirm fire in the AirSim forest environment.
 
+The fire position is auto-detected from the fire blueprint you placed
+in UE4. No fire_placer.py or manual coordinates needed.
+
 USAGE:
   python scripts/train_ppo.py
-  python scripts/train_ppo.py --timesteps 100000 --fire-x 50 --fire-y 50
+  python scripts/train_ppo.py --timesteps 100000
+  python scripts/train_ppo.py --resume models/ppo_forest_final.zip
+
+  # Override fire position manually if auto-detect fails:
+  python scripts/train_ppo.py --fire-x 45.2 --fire-y -18.7
 
 PREREQUISITES:
   1. UE4 running with AirSim + Play pressed
-  2. Fire actor placed in the scene
+  2. Fire blueprint placed in the UE4 scene (actor name must contain 'Fire' or 'fire')
   3. pip install stable-baselines3 torch gymnasium
 """
 
@@ -35,9 +42,48 @@ from stable_baselines3.common.callbacks import (
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 
+import airsim
+
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 from ppo_environment import AirSimFireEnv
+
+
+# ═══════════════════════════════════════════════════════
+# Fire Actor Detection
+# ═══════════════════════════════════════════════════════
+# AirSim object name patterns to search for the fire blueprint.
+# The actor name you set in UE4 should contain one of these strings.
+FIRE_ACTOR_PATTERNS = ["*Fire*", "*fire*", "*Flame*", "*flame*", "*BP_Fire*"]
+
+
+def detect_fire_position(client):
+    """
+    Auto-detect the fire blueprint position from the active AirSim scene.
+
+    Searches for actors whose name matches FIRE_ACTOR_PATTERNS.
+    Returns (fire_x, fire_y) in AirSim NED meters, or (0.0, 0.0) if not found.
+    """
+    for pattern in FIRE_ACTOR_PATTERNS:
+        try:
+            actors = client.simListSceneObjects(name_regex=pattern)
+            if actors:
+                pose = client.simGetObjectPose(actors[0])
+                x = pose.position.x_val
+                y = pose.position.y_val
+                print(f"  🔥 Fire actor detected : {actors[0]}")
+                print(f"  📍 Fire AirSim position: ({x:.2f}, {y:.2f}) m")
+                if len(actors) > 1:
+                    print(f"  ℹ️  Multiple fire actors found ({len(actors)}), using first: {actors[0]}")
+                return x, y
+        except Exception:
+            continue
+
+    print("  ⚠️  No fire actor found in scene.")
+    print("     Make sure your fire blueprint name contains 'Fire' or 'fire'.")
+    print("     Patterns searched:", FIRE_ACTOR_PATTERNS)
+    print("     Falling back to (0.0, 0.0) — override with --fire-x / --fire-y")
+    return 0.0, 0.0
 
 
 # ═══════════════════════════════════════════════════════
@@ -123,22 +169,30 @@ class PrintProgressCallback(BaseCallback):
         return True
 
 
-def make_env():
-    """Create a wrapped environment."""
+def make_env(fire_x=0.0, fire_y=0.0, tower_bearing=0.0):
+    """Create a wrapped environment with known fire position."""
     def _init():
-        env = AirSimFireEnv(render_mode="human")
+        env = AirSimFireEnv(
+            fire_x=fire_x,
+            fire_y=fire_y,
+            tower_bearing=tower_bearing,
+            render_mode="human"
+        )
         env = Monitor(env)
         return env
     return _init
 
 
-def train(timesteps, resume_from=None):
+def train(timesteps, resume_from=None, fire_x=0.0, fire_y=0.0, tower_bearing=0.0):
     """
     Train the PPO agent.
 
     Args:
-        timesteps: Total training timesteps
-        resume_from: Path to existing model to resume training
+        timesteps:     Total training timesteps
+        resume_from:   Path to existing model to resume training
+        fire_x, fire_y: Known fire position in AirSim meters.
+                        Use fire_placer.py --list to find these values.
+        tower_bearing: AI Tower bearing angle (degrees). Forwarded as nav hint.
     """
     # Setup directories
     model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
@@ -150,15 +204,16 @@ def train(timesteps, resume_from=None):
     print("  🧠 PPO TRAINING — UNDER-CANOPY FIRE FINDING")
     print("=" * 60)
     print(f"  📈 Total timesteps: {timesteps:,}")
-    print(f"  💾 Model directory: {model_dir}")
-    print(f"  📊 Log directory: {log_dir}")
+    print(f"  🔥 Fire position   : ({fire_x:.1f}, {fire_y:.1f}) m")
+    print(f"  🎯 Tower bearing   : {tower_bearing:.1f}°")
+    print(f"  💾 Model dir       : {os.path.join(os.path.dirname(__file__), '..', 'models')}")
     if resume_from:
-        print(f"  🔄 Resuming from: {resume_from}")
+        print(f"  🔄 Resuming from  : {resume_from}")
     print("-" * 60)
 
-    # Create environment
+    # Create environment — fire position is fixed, no tower/map-gen inside
     print("🌲 Creating environment...")
-    env = DummyVecEnv([make_env()])
+    env = DummyVecEnv([make_env(fire_x, fire_y, tower_bearing)])
 
     # Create or load model
     if resume_from and os.path.exists(resume_from):
@@ -232,14 +287,42 @@ def train(timesteps, resume_from=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train PPO agent for fire finding")
+    parser = argparse.ArgumentParser(
+        description="Train PPO agent for fire finding. Fire position is auto-detected from AirSim."
+    )
     parser.add_argument("--timesteps", type=int, default=DEFAULT_TIMESTEPS,
                         help=f"Total training timesteps (default: {DEFAULT_TIMESTEPS})")
     parser.add_argument("--resume", type=str, default=None,
                         help="Path to model.zip to resume training from")
+    parser.add_argument("--fire-x", type=float, default=None,
+                        help="Override fire X position in AirSim meters (auto-detected if omitted)")
+    parser.add_argument("--fire-y", type=float, default=None,
+                        help="Override fire Y position in AirSim meters (auto-detected if omitted)")
+    parser.add_argument("--bearing", type=float, default=0.0,
+                        help="AI Tower bearing angle in degrees (navigation hint, default: 0)")
     args = parser.parse_args()
 
-    train(args.timesteps, args.resume)
+    # Auto-detect fire position from AirSim scene
+    fire_x, fire_y = 0.0, 0.0
+    if args.fire_x is None or args.fire_y is None:
+        print("  🔌 Connecting to AirSim to detect fire position...")
+        try:
+            client = airsim.MultirotorClient()
+            client.confirmConnection()
+            detected_x, detected_y = detect_fire_position(client)
+            fire_x = args.fire_x if args.fire_x is not None else detected_x
+            fire_y = args.fire_y if args.fire_y is not None else detected_y
+        except Exception as e:
+            print(f"  ❌ AirSim connection failed: {e}")
+            print("     Make sure UE4 is running with Play pressed.")
+            fire_x = args.fire_x or 0.0
+            fire_y = args.fire_y or 0.0
+    else:
+        fire_x = args.fire_x
+        fire_y = args.fire_y
+        print(f"  📌 Using manually specified fire position: ({fire_x:.2f}, {fire_y:.2f}) m")
+
+    train(args.timesteps, args.resume, fire_x, fire_y, args.bearing)
 
 
 if __name__ == "__main__":
