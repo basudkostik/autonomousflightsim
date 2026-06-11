@@ -283,16 +283,38 @@ class BearingNavigator:
         print("\n  🔄 Stabilizing drone before PPO handoff...", flush=True)
         self.client.enableApiControl(True)
         self.client.armDisarm(True)
-        try:
-            self.client.hoverAsync().join()
-        except Exception:
-            pass
-
+        # NOTE: Do NOT call hoverAsync().join() here — join() waits for hover to
+        # "complete" then leaves drone in free-fall state. Use moveByVelocityZAsync
+        # with duration=60 below which actively holds altitude with no gap.
         # Hold altitude at current position while we set up the model
+        # CRITICAL: abs(z) check — on mountains z can be positive (below origin)
         x, y, z = self.get_position()
-        hold_alt = z if z < -1.0 else -5.0  # Use current altitude or default 5m
-        print(f"  📡 Holding altitude at Z={hold_alt:.1f}m during setup...", flush=True)
-        self.client.moveToZAsync(hold_alt, 2)  # Non-blocking, keeps drone in place
+        hold_alt = z if abs(z) > 1.0 else -5.0
+        print(f"  📡 Holding altitude at Z={hold_alt:+.1f}m during setup...", flush=True)
+
+        # Issue an IMMEDIATE 60-second altitude hold — no hover gap.
+        # hoverAsync().join() was leaving a gap between join() and the first
+        # hold command where the drone freefell. moveByVelocityZAsync with
+        # duration=60 actively holds altitude for the entire setup window.
+        try:
+            self.client.moveByVelocityZAsync(0, 0, hold_alt, duration=60)
+        except Exception as e:
+            print(f"  ⚠️  Altitude hold failed: {e}", flush=True)
+        time.sleep(0.3)
+
+        # Background thread: re-issue every 50s as backup (in case first expires)
+        import threading
+        _hold_active = [True]
+        def _altitude_hold_loop():
+            time.sleep(50)  # First hold lasts 60s, re-issue at 50s mark
+            while _hold_active[0]:
+                try:
+                    self.client.moveByVelocityZAsync(0, 0, hold_alt, duration=60)
+                except Exception:
+                    pass
+                time.sleep(50.0)
+        hold_thread = threading.Thread(target=_altitude_hold_loop, daemon=True)
+        hold_thread.start()
         time.sleep(0.5)
 
         model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
@@ -329,10 +351,7 @@ class BearingNavigator:
 
         env = DummyVecEnv([make_env])
 
-        # Re-issue altitude hold — PPO() constructor takes a few seconds
-        self.client.moveToZAsync(hold_alt, 2)
-
-        # Build PPO model
+        # Build PPO model (hold thread keeps drone airborne during this)
         model = PPO(
             "MultiInputPolicy",
             env,
@@ -347,18 +366,28 @@ class BearingNavigator:
             verbose=1,
         )
 
+        checkpoint = CheckpointCallback(
+            save_freq=2000,
+            save_path=model_dir,
+            name_prefix="ppo_chain"
+        )
+
         # Callback to STOP training once fire is confirmed
         # Without this, PPO resets → confirms fire instantly → resets → infinite loop
+        # Note: DummyVecEnv only sets termination info when episode is done
         class FireConfirmedCallback(BaseCallback):
             def _on_step(self):
+                dones = self.locals.get("dones", [])
                 infos = self.locals.get("infos", [])
-                for info in infos:
-                    if info.get("termination") == "fire_confirmed":
+                for done, info in zip(dones, infos):
+                    if done and info.get("termination") == "fire_confirmed":
                         print("\n\n  ✅ Fire confirmed — stopping PPO training!", flush=True)
                         return False  # Stops model.learn()
                 return True
 
         print("\n  🚀 Training started — will stop when fire is confirmed")
+        # Stop the background hold thread — PPO step() now controls flight
+        _hold_active[0] = False
         total_steps = 50000
         try:
             model.learn(

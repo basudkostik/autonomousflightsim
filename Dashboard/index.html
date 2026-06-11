@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fire Sentinel — Mission Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+<div id="loader-overlay" style="position:fixed;inset:0;background:#060c14;z-index:9999;display:flex;align-items:center;justify-content:center;color:var(--green);font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:2px;">
+  INITIALIZING MISSION CONTROL...
+</div>
+
+<!-- HEADER CHUNK -->
+<div id="header-container" data-include="components/header.html"></div>
+
+<!-- MAIN LAYOUT -->
+<div id="app">
+  <!-- LEFT: 4-sector grid -->
+  <div id="sector-grid-container" data-include="components/sector_grid.html"></div>
+
+  <!-- CENTER: Expanded Sector C -->
+  <div id="sector-c-main-container" data-include="components/sector_c_main.html"></div>
+
+  <!-- RIGHT: Sidebar -->
+  <div id="sidebar-container" data-include="components/sidebar.html"></div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <span id="lb-close" onclick="closeLightbox()">×</span>
+  <span id="lb-prev" onclick="lbNav(-1)">&#8249;</span>
+  <img id="lb-img" src="" alt="photo"/>
+  <span id="lb-next" onclick="lbNav(1)">&#8250;</span>
+  <div id="lb-caption"></div>
+  <div id="lb-counter"></div>
+</div>
+
+<script>
+/**
+ * Simple chunk loader to manage index.html size
+ */
+async function loadChunks() {
+  const elements = document.querySelectorAll('[data-include]');
+  const promises = Array.from(elements).map(async (el) => {
+    const file = el.getAttribute('data-include');
+    try {
+      const response = await fetch(file);
+      if (response.ok) {
+        const content = await response.text();
+        el.outerHTML = content; // Replace container with chunk content
+      } else {
+        console.error(`Failed to load chunk: ${file}`);
+      }
+    } catch (err) {
+      console.error(`Error loading chunk ${file}:`, err);
+    }
+  });
+
+  await Promise.all(promises);
+  
+  // Remove loader overlay
+  setTimeout(() => {
+    const loader = document.getElementById('loader-overlay');
+    if (loader) loader.style.opacity = '0';
+    setTimeout(() => loader?.remove(), 500);
+  }, 300);
+
+  // Initialize main logic after chunks are loaded
+  const script = document.createElement('script');
+  script.src = 'dashboard.js';
+  document.body.appendChild(script);
+}
+
+loadChunks();
+</script>
+</body>
+</html>

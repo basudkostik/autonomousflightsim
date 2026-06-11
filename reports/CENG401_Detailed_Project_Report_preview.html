@@ -1,0 +1,1186 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CENG401 Detailed Project Report Preview</title>
+<style>
+:root { color-scheme: light; --ink:#1b1f24; --line:#d8dee7; --soft:#f6f8fb; --brand:#0f766e; }
+body { margin:0; background:#eef2f7; color:var(--ink); font-family: Arial, Helvetica, sans-serif; line-height:1.58; }
+.toolbar { position:sticky; top:0; z-index:10; background:#18212f; color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.toolbar button { border:1px solid rgba(255,255,255,.35); background:#263246; color:white; border-radius:6px; padding:7px 10px; cursor:pointer; }
+.page { max-width:980px; margin:28px auto; background:#fff; padding:48px 56px; box-shadow:0 18px 50px rgba(15,23,42,.12); border-radius:8px; }
+h1,h2,h3 { line-height:1.22; margin-top:1.45em; }
+h1 { font-size:30px; border-bottom:2px solid var(--brand); padding-bottom:12px; }
+h2 { font-size:24px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+h3 { font-size:19px; color:#243142; }
+p { margin:10px 0; }
+a { color:#0f766e; }
+table { border-collapse:collapse; width:100%; margin:18px 0 24px; font-size:14px; }
+th,td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+th { background:#edf6f5; text-align:left; }
+tr:nth-child(even) td { background:#fbfcfe; }
+ul,ol { margin:10px 0 16px 28px; padding:0; }
+li { margin:5px 0; }
+figure { margin:16px 0 22px; }
+img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:6px; }
+figcaption { color:#667085; font-size:13px; margin-top:4px; }
+pre, .mermaid { background:#f8fafc; border:1px solid var(--line); padding:16px; overflow:auto; border-radius:7px; }
+pre { background:#0f172a; color:#e5e7eb; }
+code { font-family:Consolas, Monaco, monospace; }
+.mermaid { margin:18px 0 26px; }
+@media print { body { background:white; } .toolbar { display:none; } .page { box-shadow:none; margin:0; padding:24px; max-width:none; } }
+</style>
+</head>
+<body>
+<div class="toolbar"><strong>CENG401 report preview</strong><button onclick="window.print()">Print / Save PDF</button></div>
+<main class="page">
+<h1>Autonomous UAV Navigation for Early Forest Fire Detection and Confirmation</h1>
+<p>Course: CENG401 - Computer Engineering Design</p>
+<p>Author: Batuhan Turkaslan (210401052)</p>
+<p>Supervisor: Asst. Prof. Dr. Mansur Alp Tocoglu</p>
+<p>Date: 14 May 2026</p>
+<h2>Abstract</h2>
+<p>Forest fires pose a devastating threat to ecosystems, property, and human life [1]. A critical limitation of existing fire detection systems, such as satellites and high-altitude unmanned aerial vehicles (UAVs), is their inability to detect fires until smoke rises above the forest canopy, often resulting in delayed intervention when the fire has already grown to a dangerous scale [5, 25]. Early optical remote sensing systems and smoke-detection techniques have also been studied extensively, yet they still rely on above-canopy visibility [3, 4].</p>
+<p>This project proposes a novel autonomous drone system designed to operate beneath the forest canopy, confirming fires at their earliest and most manageable stage. It presents an autonomous UAV simulation system that combines a fixed AI tower camera, classical computer vision, bearing-based UAV dispatch, close-range Deep Reinforcement Learning (DRL) navigation, and a web dashboard. The main idea is that the system should not assume a complete forest map or an exact fire coordinate at the start of the mission. Instead, a fixed camera detects a suspicious smoke/fire region and dispatches the UAV toward the suspected bearing. The core challenge of navigating within this dense and GPS-degraded environment is addressed through DRL [9, 10], utilizing a Proximal Policy Optimization (PPO) agent [9] trained in a realistic Unreal Engine simulation to autonomously avoid obstacles and approach the fire. The recorded simulation mission successfully detected a 50,742-pixel smoke/fire change region, calculated a 207.38 degree bearing, handed off after 20.09 percent smoke density, and confirmed fire at 4.3 m using close-range scan images.</p>
+<h2>1. Introduction</h2>
+<p>This report is prepared to explain the scope, objectives, and methodology of the thesis/project study planned within the scope of the term project. In this report, the research problem, justification, requirements, modeling approach, and the technologies to be used will be presented from a holistic perspective.</p>
+<p>Wildfires pose a catastrophic threat to ecosystems, property, and human life worldwide, causing severe ecological damage and significant economic losses [1, 2]. A critical limitation of existing forest fire detection systems, such as satellites and high-altitude unmanned aerial vehicles (UAVs), is their inability to detect fires until smoke rises above the forest canopy. This constraint often leads to delayed intervention, at which point fires may have already reached an uncontrollable scale [25]. Deep-learning-based UAV approaches and swarm systems have been explored to close this gap, but they still predominantly operate above the canopy [6, 7].</p>
+<p>To address this limitation, this thesis proposes a novel autonomous UAV system designed to operate under the forest canopy, enabling the confirmation of fires at their earliest and most manageable stage. Navigating such dense and cluttered environments presents a significant technical challenge, particularly due to unreliable or unavailable GPS signals. This challenge is addressed through the use of Deep Reinforcement Learning (DRL), which enables the UAV to learn obstacle avoidance behaviors directly from sensory input [6, 24].</p>
+<p>In this simulation environment, the system utilizes a two-tier approach. A fixed AI tower first detects smoke or fire in the image, estimating the bearing of the suspicious region and dispatching a UAV. The UAV follows the bearing, detects smoke from its own camera, and confirms the fire at close range using a Proximal Policy Optimization (PPO) agent trained in a high-fidelity Unreal Engine and AirSim-based simulation [8, 9]. By integrating the DRL-based navigation framework with real-time image processing techniques for fire and smoke detection, this study develops a proof-of-concept low-altitude patrol system capable of providing early warnings and mitigating small ignitions before they escalate.</p>
+<p>The software-engineering structure of the report follows real engineering standards. Requirements engineering is guided by ISO/IEC/IEEE 29148 [13]. Architecture description is guided by ISO/IEC/IEEE 42010 [14]. Non-functional quality attributes follow the ISO/IEC 25010 quality model [15]. UML diagrams follow the Object Management Group UML specification [16]. Ethical impact is considered using the ACM Code of Ethics and Professional Conduct [19].</p>
+<h2>2. Literature Review</h2>
+<p>This section reviews existing academic studies and commercial products, and explains the technical &quot;gap&quot; the project fills compared to existing solutions.</p>
+<p>Forest fire detection and autonomous UAV navigation have been extensively studied as independent research areas. However, their integration—particularly for early fire detection under forest canopy conditions—remains a challenging and relatively underexplored problem. This section reviews existing studies in wildfire detection systems, UAV-based navigation in GPS-denied environments, deep reinforcement learning for autonomous navigation, and hybrid control architectures.</p>
+<p>Traditional forest fire detection systems rely primarily on satellite imagery, watchtowers, and high-altitude UAVs. Satellite-based systems such as MODIS and VIIRS provide wide-area monitoring capabilities but suffer from inherent limitations, including low temporal resolution and delayed detection due to smoke-based sensing mechanisms. Several studies highlight that these systems typically detect fires only after smoke has risen above the forest canopy, which often corresponds to an advanced stage of fire spread [25]. High-altitude UAV-based fire monitoring systems improve spatial resolution but still face similar limitations, as they depend on visible smoke plumes and thermal signatures observable from above the canopy [5]. As a result, early-stage ignition events occurring beneath dense foliage often remain undetected. These findings motivate the need for low-altitude, under-canopy surveillance systems capable of detecting fires at their earliest stages.</p>
+<p>Classical video-based fire detection studies are also directly related to this project because the tower module uses explainable image processing instead of an end-to-end black-box detector. Earlier vision studies show that color, motion, region change, and shape cues can be combined for real-time flame and fire detection in video streams [26, 27, 28]. This supports the use of frame differencing, HSV filtering, contour area thresholds, and consecutive-frame confirmation in the tower module. However, these classical methods are also sensitive to lighting, smoke color, camera angle, and background motion, which is why the project uses the tower result as an initial alarm and then requires UAV close-range confirmation.</p>
+<p>Autonomous UAV navigation in forested environments presents significant challenges due to dense obstacles, dynamic terrain, and unreliable GPS signals. Multipath effects, signal attenuation, and occlusions caused by foliage frequently result in inaccurate or unavailable positioning data [22, 23]. Consequently, classical GPS-based navigation and map-dependent planning methods often fail in under-canopy environments. Several studies have explored alternative navigation strategies using onboard sensors such as depth cameras, LiDAR, and stereo vision to enable perception-driven flight in cluttered environments [7, 23]. These approaches demonstrate that real-time environmental perception is essential for safe navigation in GPS-denied scenarios, laying the groundwork for learning-based decision-making systems.</p>
+<p>Deep Reinforcement Learning (DRL) has emerged as a powerful framework for autonomous navigation in unknown and dynamic environments. Unlike classical rule-based controllers, DRL agents learn optimal control policies directly from sensor data through interaction with the environment. Proximal Policy Optimization (PPO), in particular, has gained popularity due to its stability and effectiveness in continuous action spaces, making it suitable for UAV control tasks [9]. Multiple studies have successfully applied DRL techniques to robotic and UAV navigation problems, demonstrating robust obstacle avoidance and goal-reaching capabilities without explicit environment maps [6, 24]. Simulation platforms such as Unreal Engine and AirSim have been widely adopted to train DRL agents safely and efficiently, enabling realistic physics and sensor modelling while avoiding real-world risks [8].</p>
+<p>Despite significant advances in UAV navigation and wildfire detection, existing studies largely focus on either high-altitude fire monitoring or autonomous navigation as separate problems. While there are numerous studies on either fixed optical fire detection or UAV-based fire monitoring, there is a technical gap in open-source simulated environments that tightly couple both approaches using hybrid navigation. Many existing solutions assume exact coordinates are provided by an external system or rely entirely on deep learning for end-to-end flight, which can be computationally expensive and difficult to explain. This project fills that gap by providing a repeatable simulation pipeline that combines explainable rule-based bearing detection from an AI tower with adaptive reinforcement learning for close-range confirmation, offering a complete end-to-end framework without assuming prior exact coordinates.</p>
+<p>The software-engineering structure of the report follows real engineering standards. Requirements engineering is guided by ISO/IEC/IEEE 29148 [13]. Architecture description is guided by ISO/IEC/IEEE 42010 [14]. Non-functional quality attributes follow the ISO/IEC 25010 quality model [15]. UML diagrams follow the Object Management Group UML specification [16]. Ethical impact is considered using the ACM Code of Ethics and Professional Conduct [19].</p>
+<h2>3. Project / Thesis Description</h2>
+<p>In this section, the problem addressed by the project is clearly and precisely defined. The domain of the project, the context in which it is handled, and the overall framework of the study are explained. In addition, the scope and limitations of the study are clearly stated.</p>
+<p>This study focuses on the development of an Unmanned Aerial Vehicle (UAV) system capable of autonomously flying at ground level between tree trunks, with the aim of detecting forest fires at their earliest stage, while they are still in the &#39;spark&#39; phase and before smoke rises above the treetops. The system is trained in a simulation environment based on Unreal Engine and AirSim to eliminate real-world risks and costs.</p>
+<p>Current fire surveillance systems, satellites, and high-altitude UAVs can generally only detect smoke once it has risen above the treetops, meaning that the initial stages of a fire often go unnoticed, leading to critical delays in intervention. This thesis aims to eliminate this delay by developing an intelligent navigation system capable of conducting reconnaissance beneath the forest canopy and detecting the &#39;initial spark&#39; by flying close to the forest floor, even when smoke is obscured by foliage. The goal is to provide detection at the earliest and still controllable stage of the fire, offering critical time advantages to intervention teams.</p>
+<p>The project is a simulation-based autonomous fire detection and UAV response system that adopts a hybrid architecture. It has two main sensing levels. The first level is a stationary AI tower camera that watches the forest from a high viewpoint to provide global navigation cues. The second level is the UAV camera, which approaches the suspected fire region to perform local avoidance and close-range confirmation.</p>
+<p>The system does not start with a perfect map of the whole forest or an exact target coordinate. This is intentional. In a real early fire scenario, the first information is often incomplete: smoke is visible in some direction, but the exact location, obstacle layout, and safe path may be unknown. Therefore, the project uses bearing navigation for initial dispatch instead of predefined GPS waypoints. Bearing navigation is simple, explainable, and suitable when the system knows direction but not exact target position. Once the UAV gets closer, close-range image observations and Deep Reinforcement Learning (DRL) navigation are used to avoid trees and confirm the fire.</p>
+<p>This scope also explains why full path-planning algorithms such as A*, RRT, and PRM were not selected as the main mission planner. A* assumes a searchable graph or grid with known costs, while RRT and PRM are powerful sampling-based planners that are most useful when the planner has a defined start, goal, and collision model [29, 30, 31]. In this project, the system starts with a bearing and uncertain visual evidence rather than a complete occupancy map and exact fire coordinate. Therefore, bearing navigation is used for the global phase, and local sensor-based control is used when the UAV reaches the uncertain area.</p>
+<p>The current implementation includes the following major modules:</p>
+<ol>
+<li>AI tower monitoring module: captures baseline and monitoring frames, detects change, filters smoke/fire-like regions, and calculates bearing.</li>
+<li>Bearing navigator (Global Planner): converts the tower bearing into UAV motion and uses cross-track correction to stay near the bearing ray.</li>
+<li>PPO fire environment (Local Planner): represents close-range navigation as a reinforcement learning environment with depth observations and target direction.</li>
+<li>Mission controller / dispatch logic: arms the drone, takes off, switches phases, saves logs, and lands.</li>
+<li>Dashboard: displays state, logs, mission images, and confirmation information.</li>
+<li>Evidence storage: saves alarm images, transition frames, 360-degree scan images, mission logs, and model files.</li>
+</ol>
+<h2>4. Aim, Objectives and Contribution</h2>
+<p>This section explains the main aim of the study and the specific objectives defined to achieve this aim. While the aim provides a general framework, the objectives are stated as measurable and achievable items. The academic, technical, or practical contributions of this study, as well as the position of the study within the relevant literature, are also briefly discussed.</p>
+<p>The aim of the project is to design and evaluate a simulated autonomous UAV system that can detect a possible forest fire early, navigate toward the suspected source beneath the canopy, and confirm the fire visually using a hybrid control architecture.</p>
+<p>The objectives are:</p>
+<ol>
+<li>Realistic Simulation Environment: Create a photorealistic forest simulation area within Unreal Engine that includes tree trunks, branches, dense vegetation, uneven terrain, and optional fire effects.</li>
+<li>AirSim Integration: Integrate a UAV model that complies with the laws of physics and has defined sensors (RGB camera, depth camera, IMU) into this environment.</li>
+<li>Hierarchical Control Architecture: Create a multi-layer architecture that enables the UAV to avoid local obstacles while following a global route (AI Tower -&gt; Bearing Dispatch -&gt; PPO Avoidance).</li>
+<li>AI Tower Early Warning: Build a tower-based early warning module using image processing to convert detected smoke/fire into a bearing angle.</li>
+<li>RL-Based Obstacle Avoidance: Develop and train a reinforcement learning agent that processes depth camera and target direction information using the Proximal Policy Optimization (PPO) algorithm to navigate safely within dense tree cover.</li>
+<li>Anomaly Detection and Confirmation: Design a module that detects fire/dense smoke by analyzing images captured by the UAV&#39;s RGB camera using color filtering, reporting the detected location and capturing 360-degree scans.</li>
+<li>System Integration: Develop an integrated UAV system capable of autonomous exploration and situation analysis by combining navigation, obstacle avoidance, and anomaly detection under a single functional structure, visualized by a web dashboard.</li>
+</ol>
+<p>The project contributions and justifications are:</p>
+<p>Traditional GPS-based autonomous flight algorithms prove inadequate in dense forest environments where obstacles are prevalent; deviations in GPS signals and dynamic surroundings can cause collisions [22]. Therefore, there is a need for learning-based approaches that can instantly &quot;see&quot; the environment and make decisions. Deep Reinforcement Learning offers a powerful solution for autonomous navigation in unknown environments where GPS is weak [6, 24]. This thesis contributes to the literature by producing a DRL-based solution to the challenging research topic of &quot;autonomous navigation in unknown environments&quot;.</p>
+<p>Furthermore, the study aims to validate an autonomous drone prototype that can be used as an &quot;Early Warning System&quot;, eliminating the risk to human operators. Current forest fire detection systems typically detect fires when smoke spreads over a wide area and rises above the treetops, resulting in critical delays. True early intervention is only possible when the fire is detected at its initial stage. This project proposes a technological solution designed to fill this critical gap. The hybrid architecture (AI Tower bearing dispatch combined with DRL local avoidance) reduces the failure-to-reach-goal issues of pure RL approaches while eliminating the fragility of map-based planners against dynamic obstacles. Ultimately, the study increases the effectiveness of early warning systems, contributing to the reduction of ecological and economic losses.</p>
+<h2>5. Requirements Analysis</h2>
+<p>In this section, the requirements of the system to be developed are addressed under two main categories.</p>
+<p>Requirements engineering defines what a system must do and what qualities it must satisfy [13]. In this project, requirements were derived from the mission goal: detect a suspected fire, dispatch a UAV, navigate toward it, confirm it, and save evidence.</p>
+<h3>5.1 Functional Requirements</h3>
+<p>These requirements define what the system should do and are stated clearly in the form of itemized statements.</p>
+<table><thead><tr>
+<th>ID</th>
+<th>Functional Requirement</th>
+<th>Priority</th>
+<th>Verification Method</th>
+</tr></thead><tbody>
+<tr>
+<td>FR-01</td>
+<td>Global Navigation: The system must use an AI Tower camera to detect fire/smoke regions and calculate a navigation bearing.</td>
+<td>High</td>
+<td>Tower Alarm logs &amp; output images</td>
+</tr>
+<tr>
+<td>FR-02</td>
+<td>Dispatch Automation: The system shall autonomously arm, take off, and dispatch the UAV along the calculated bearing.</td>
+<td>High</td>
+<td>Flight logs &amp; AirSim state</td>
+</tr>
+<tr>
+<td>FR-03</td>
+<td>Local Avoidance: The UAV must process data from its depth camera in real-time to detect trees, branches, and obstacles ahead.</td>
+<td>High</td>
+<td>Depth sensor observation logs</td>
+</tr>
+<tr>
+<td>FR-04</td>
+<td>DRL-Based Local Planner: The RL agent must generate instantaneous speed, steering, and maneuver commands using depth data and the target direction to ensure collision-free progress.</td>
+<td>High</td>
+<td>PPO policy execution &amp; survival rate</td>
+</tr>
+<tr>
+<td>FR-05</td>
+<td>Altitude Hold Control: The UAV must autonomously maintain the safe cruising altitude required for forest interior flight (e.g., maintaining terrain-hugging flight without erratic vertical oscillations).</td>
+<td>High</td>
+<td>Z-axis telemetry logs</td>
+</tr>
+<tr>
+<td>FR-06</td>
+<td>Fire Detection &amp; Handoff: The UAV&#39;s RGB camera image must be continuously analyzed for smoke density to hand off control to the close-range navigation phase.</td>
+<td>High</td>
+<td>Phase transition logs</td>
+</tr>
+<tr>
+<td>FR-07</td>
+<td>Fire Confirmation: Upon reaching the suspected fire area, the UAV must perform a 360-degree scan to confirm the exact location of the fire via HSV filtering.</td>
+<td>High</td>
+<td>Saved scan images &amp; confirmation event</td>
+</tr>
+<tr>
+<td>FR-08</td>
+<td>Dashboard Integration: The system must host a web dashboard that provides real-time mission status, console logs, and a photo gallery of the mission evidence.</td>
+<td>Medium</td>
+<td>Dashboard visual check</td>
+</tr>
+<tr>
+<td>FR-09</td>
+<td>Data Recording: All abnormal situations, phase transitions, and fire confirmation evidence must be recorded in the system log file along with a timestamp.</td>
+<td>High</td>
+<td>Output folder log inspection</td>
+</tr>
+</tbody></table>
+<h3>5.2 Non-Functional Requirements</h3>
+<p>These requirements describe how the system should operate and include quality attributes such as performance, security, usability, and reliability.</p>
+<table><thead><tr>
+<th>ID</th>
+<th>Non-Functional Requirement</th>
+<th>Quality Attribute</th>
+<th>Target / Rationale</th>
+</tr></thead><tbody>
+<tr>
+<td>NFR-01</td>
+<td>Real-Time Capability: The decision-making cycle (perception -&gt; decision -&gt; action) must operate at least 10 times per second for the RL agent.</td>
+<td>Performance</td>
+<td>Ensures safe obstacle avoidance</td>
+</tr>
+<tr>
+<td>NFR-02</td>
+<td>Performance &amp; Survival: The RL agent must complete tasks with a high success rate, avoiding trees during the close-range phase.</td>
+<td>Reliability</td>
+<td>Avoids UAV collision in dense forests</td>
+</tr>
+<tr>
+<td>NFR-03</td>
+<td>Modularity: The navigation module (RL local planner) and the detection module (AI Tower / Computer Vision) should be loosely coupled.</td>
+<td>Maintainability</td>
+<td>Future integration of advanced ML models</td>
+</tr>
+<tr>
+<td>NFR-04</td>
+<td>Simulation Speed: To accelerate training, the simulation environment must support operation at a speed exceeding real-time.</td>
+<td>Performance</td>
+<td>Reduces DRL training time</td>
+</tr>
+<tr>
+<td>NFR-05</td>
+<td>Fail-Safe &amp; Landing: The system must switch to an emergency mode (e.g., timeout and safe landing) to avoid uncontrolled missions.</td>
+<td>Safety / Reliability</td>
+<td>Prevents endless flight</td>
+</tr>
+<tr>
+<td>NFR-06</td>
+<td>Safety-First Validation: The system shall use high-fidelity simulation before any physical deployment.</td>
+<td>Safety</td>
+<td>Avoids hardware and environmental risk</td>
+</tr>
+<tr>
+<td>NFR-07</td>
+<td>Privacy by Design: The system should avoid collecting unnecessary real human data during development and simulated deployments.</td>
+<td>Ethics / Privacy</td>
+<td>Supports responsible UAV use</td>
+</tr>
+</tbody></table>
+<h2>6. Modeling</h2>
+<p>In this section, the structural and behavioral design of the system is explained through diagrams.</p>
+<p>Modeling is used to make the design understandable before and during implementation. UML diagrams are a standard way to describe use cases, interactions, and software structure [16]. The diagrams below describe the implemented system at a high level.</p>
+<h3>6.1 System Architecture and High-Level Design</h3>
+<p>In this section, a comprehensive System Architecture Diagram is provided. This diagram acts as the &quot;Big Picture&quot; of the project, showing how all components interact with each other.</p>
+<p>The proposed system is designed with a modular and hierarchical architecture to enable safe autonomous navigation and early stage forest fire detection. The architecture follows a pipeline design structured into three main layers:</p>
+<ul>
+<li><strong>Strategic Layer (Global Navigation Layer):</strong> This layer handles high-level navigation objectives. The AI tower layer detects the event, the vision layer estimates a bearing, and the mission layer dispatches the UAV along that trajectory.</li>
+<li><strong>Tactical Layer (Local Navigation and Obstacle Avoidance):</strong> The tactical layer hosts a PPO-based DRL agent trained to perform real-time obstacle avoidance. Using depth camera data and target direction information, the agent produces continuous velocity and yaw commands to safely navigate through dense forest structures such as tree trunks.</li>
+<li><strong>Perception Layer (Fire Detection and Environmental Sensing):</strong> This layer processes RGB camera images in real-time using computer vision to detect fire and smoke anomalies. The evidence/dashboard layer then stores and displays the confirmation results.</li>
+</ul>
+<p>These layers operate in an integrated manner within a high-fidelity simulation environment provided by Unreal Engine and AirSim, ensuring realistic physics and sensor behavior. Architecture description is important because it documents these system components, relationships, and design decisions [14].</p>
+<div class="mermaid">flowchart LR
+    Operator[&quot;Operator / Student&quot;] --&gt; Tower[&quot;AI Tower Camera&quot;]
+    Tower --&gt; Vision[&quot;Vision Module\nFrame difference + HSV + contours&quot;]
+    Vision --&gt; Bearing[&quot;Bearing Estimator&quot;]
+    Bearing --&gt; Mission[&quot;Mission Logic / Dispatch&quot;]
+    Mission --&gt; Nav[&quot;Bearing Navigator&quot;]
+    Nav --&gt; PPO[&quot;PPO Close-Range Environment&quot;]
+    PPO --&gt; Confirm[&quot;Fire Confirmation Scan&quot;]
+    Confirm --&gt; Evidence[&quot;Evidence Storage&quot;]
+    Evidence --&gt; Dashboard[&quot;Dashboard&quot;]
+    Dashboard --&gt; Operator</div>
+<h3>6.2 Use Case Diagrams</h3>
+<p>The system actors and their interactions with the system are illustrated using use case diagrams.</p>
+<p>The main external actor is the operator/student, who starts the system and observes results. AirSim acts as the simulation environment, and the UAV acts as the vehicle executing the mission.</p>
+<div class="mermaid">flowchart TB
+    Operator[&quot;Operator / Student&quot;]
+    Simulator[&quot;AirSim Simulator&quot;]
+    UAV[&quot;UAV&quot;]
+    Dashboard[&quot;Dashboard&quot;]
+
+    UC1[&quot;Start Monitoring&quot;]
+    UC2[&quot;Capture Baseline&quot;]
+    UC3[&quot;Detect Smoke/Fire&quot;]
+    UC4[&quot;Calculate Bearing&quot;]
+    UC5[&quot;Dispatch UAV&quot;]
+    UC6[&quot;Navigate Toward Fire&quot;]
+    UC7[&quot;Confirm Fire&quot;]
+    UC8[&quot;View Logs and Photos&quot;]
+    UC9[&quot;Store Mission Evidence&quot;]
+
+    Operator --&gt; UC1
+    UC1 --&gt; UC2
+    UC2 --&gt; UC3
+    UC3 --&gt; UC4
+    UC4 --&gt; UC5
+    UC5 --&gt; UAV
+    UAV --&gt; UC6
+    UAV --&gt; UC7
+    UC7 --&gt; UC9
+    UC9 --&gt; Dashboard
+    Operator --&gt; UC8
+    Simulator --&gt; UC2
+    Simulator --&gt; UC6</div>
+<p>Main use cases:</p>
+<ol>
+<li>Start monitoring.</li>
+<li>Capture baseline frame.</li>
+<li>Detect smoke/fire.</li>
+<li>Calculate bearing.</li>
+<li>Dispatch UAV.</li>
+<li>Navigate toward suspected fire.</li>
+<li>Confirm fire.</li>
+<li>View dashboard.</li>
+<li>Store mission evidence.</li>
+</ol>
+<h3>6.3 Sequence Diagrams</h3>
+<p>The sequence of interactions between system components for a specific scenario is explained using sequence diagrams.</p>
+<p>The first sequence shows the alarm and dispatch process. The important point is that the tower produces a bearing, not a complete path. This supports the design decision to use bearing navigation first.</p>
+<div class="mermaid">sequenceDiagram
+    actor Operator
+    participant Tower as AI Tower Monitor
+    participant Vision as Vision Module
+    participant Mission as Mission Logic
+    participant UAV as UAV / AirSim
+    Operator-&gt;&gt;Tower: Start monitoring
+    Tower-&gt;&gt;Tower: Capture baseline frame
+    loop Every capture interval
+        Tower-&gt;&gt;Vision: Send current frame
+        Vision-&gt;&gt;Vision: Frame difference + HSV mask + contours
+        Vision--&gt;&gt;Tower: Change area and centroid
+    end
+    Tower-&gt;&gt;Mission: Alarm confirmed + bearing
+    Mission-&gt;&gt;UAV: Reset, arm, take off
+    Mission-&gt;&gt;UAV: Start bearing navigation</div>
+<p>The second sequence shows the close-range confirmation process. After the bearing phase detects enough smoke or reaches a handoff condition, the PPO environment and UAV camera support final confirmation.</p>
+<div class="mermaid">sequenceDiagram
+    participant Nav as Bearing Navigator
+    participant Env as PPO Environment
+    participant UAV as UAV Camera / Sensors
+    participant Store as Evidence Storage
+    participant Dash as Dashboard
+    Nav-&gt;&gt;UAV: Capture front camera frame
+    UAV--&gt;&gt;Nav: RGB image
+    Nav-&gt;&gt;Nav: Smoke density check
+    Nav-&gt;&gt;Env: Handoff to close-range phase
+    loop PPO / homing steps
+        Env-&gt;&gt;UAV: Velocity and yaw command
+        UAV--&gt;&gt;Env: Depth image, position, collision data
+    end
+    Env-&gt;&gt;UAV: 360-degree scan
+    UAV--&gt;&gt;Store: Scan images
+    Env-&gt;&gt;Store: Fire confirmation result
+    Store-&gt;&gt;Dash: New photos and status</div>
+<p>The third sequence shows the bearing navigation phase in more detail. This phase is important because the system does not initially know the exact fire coordinates. The UAV therefore follows a suspected direction and uses camera evidence to decide when to hand off to the close-range phase.</p>
+<div class="mermaid">sequenceDiagram
+    participant Mission as Mission Logic
+    participant Nav as Bearing Navigator
+    participant UAV as UAV / AirSim
+    participant Camera as Front Camera
+    participant Env as PPO Environment
+    Mission-&gt;&gt;Nav: Start with tower bearing
+    Nav-&gt;&gt;UAV: Request current position and yaw
+    UAV--&gt;&gt;Nav: Pose and heading
+    Nav-&gt;&gt;Nav: Compute bearing error and cross-track correction
+    Nav-&gt;&gt;UAV: Send velocity command
+    Nav-&gt;&gt;Camera: Capture forward image
+    Camera--&gt;&gt;Nav: RGB frame
+    Nav-&gt;&gt;Nav: Estimate smoke density
+    alt Smoke density is high enough
+        Nav-&gt;&gt;Env: Trigger close-range handoff
+    else Smoke density is low
+        Nav-&gt;&gt;UAV: Continue bearing flight
+    end</div>
+<p>The fourth sequence shows one step of the PPO-based local navigation loop. This diagram explains why a learning-based component is useful in the project: the UAV must react to nearby trees and partial sensor information instead of following a precomputed complete path.</p>
+<div class="mermaid">sequenceDiagram
+    participant Agent as PPO Agent
+    participant Env as PPO Environment
+    participant UAV as UAV / AirSim
+    participant Sensors as Depth + RGB Sensors
+    participant Reward as Reward Function
+    Env-&gt;&gt;Sensors: Read observation
+    Sensors--&gt;&gt;Env: Depth image, target direction, pose
+    Env-&gt;&gt;Agent: Provide observation vector
+    Agent--&gt;&gt;Env: Continuous action
+    Env-&gt;&gt;UAV: Apply velocity and yaw command
+    UAV--&gt;&gt;Env: Updated pose and collision status
+    Env-&gt;&gt;Reward: Calculate progress, distance, collision, confirmation reward
+    Reward--&gt;&gt;Env: Step reward and done flag</div>
+<p>The fifth sequence shows how the dashboard receives mission information. This is useful for the report because it separates the autonomous mission logic from the monitoring interface.</p>
+<div class="mermaid">sequenceDiagram
+    actor Operator
+    participant Dash as Dashboard UI
+    participant Server as Dashboard Server
+    participant Log as Mission Log
+    participant Photos as Evidence Folder
+    Operator-&gt;&gt;Dash: Open dashboard
+    Dash-&gt;&gt;Server: Request mission status
+    Server-&gt;&gt;Log: Read latest mission events
+    Server--&gt;&gt;Dash: Status, timer, phase, coordinates masked when needed
+    loop Live mission updates
+        Log--&gt;&gt;Server: New detection or navigation event
+        Server--&gt;&gt;Dash: Stream event update
+    end
+    Dash-&gt;&gt;Server: Request photo gallery
+    Server-&gt;&gt;Photos: Load alarm and scan images
+    Photos--&gt;&gt;Dash: Evidence image list</div>
+<p>The sixth sequence shows failure handling and safe mission termination. Even in simulation, this scenario should be modeled because real autonomous UAV systems must explain what happens when detection is weak, the UAV collides, or the mission cannot be confirmed.</p>
+<div class="mermaid">sequenceDiagram
+    actor Operator
+    participant Tower as AI Tower Monitor
+    participant Mission as Mission Logic
+    participant UAV as UAV / AirSim
+    participant Dash as Dashboard
+    Tower-&gt;&gt;Mission: Send alarm candidate
+    alt Alarm does not pass consecutive-frame threshold
+        Mission-&gt;&gt;Dash: Mark as unconfirmed candidate
+        Mission--&gt;&gt;Operator: Continue monitoring
+    else Alarm confirmed
+        Mission-&gt;&gt;UAV: Dispatch UAV
+        UAV--&gt;&gt;Mission: Flight status
+        alt Collision or timeout occurs
+            Mission-&gt;&gt;UAV: Stop movement and land / reset
+            Mission-&gt;&gt;Dash: Save failure status and evidence
+        else Fire confirmation succeeds
+            Mission-&gt;&gt;Dash: Save confirmed status and scan evidence
+        end
+    end</div>
+<h3>6.4 Class Diagrams</h3>
+<p>The classes in the system, their attributes, methods, and relationships are modeled using class diagrams.</p>
+<p>The class diagram summarizes the main implementation units visible in the repository. The actual project is implemented as Python modules rather than a strict object-oriented enterprise system, but the classes and modules still have clear responsibilities.</p>
+<div class="mermaid">classDiagram
+    class AITowerMonitor {
+        capture_tower_image()
+        compare_frames()
+        calculate_bearing()
+        dispatch_drone()
+    }
+    class BearingNavigator {
+        compute_cte_velocity()
+        check_smoke_density()
+        fly_toward_bearing()
+    }
+    class AirSimFireEnv {
+        reset()
+        step(action)
+        get_observation()
+        check_fire_confirmed()
+    }
+    class PPONavigator {
+        get_depth_image()
+        get_target_direction()
+        navigate_and_confirm()
+    }
+    class MapGenerator {
+        generate()
+        place_trees()
+        place_fire()
+        get_fire_position()
+    }
+    class DashboardServer {
+        api_status()
+        api_photos()
+        sse_events()
+        serve_photo()
+    }
+    AITowerMonitor --&gt; BearingNavigator
+    BearingNavigator --&gt; AirSimFireEnv
+    AirSimFireEnv --&gt; PPONavigator
+    AITowerMonitor --&gt; DashboardServer
+    MapGenerator --&gt; AirSimFireEnv</div>
+<h3>6.5 Data Design &amp; ER Diagram</h3>
+<p>This section provides the Entity-Relationship diagram and a data dictionary (data types, constraints).</p>
+<p>The current system mainly stores data as files rather than in a relational database. However, the logical data model can still be represented using an ER diagram. This is useful because future versions may store mission records in SQLite or another database.</p>
+<div class="mermaid">erDiagram
+    MISSION_RUN ||--o{ TOWER_FRAME : captures
+    MISSION_RUN ||--o{ FLIGHT_LOG : records
+    MISSION_RUN ||--o{ MISSION_IMAGE : stores
+    MISSION_RUN ||--o{ PPO_MODEL : produces
+    TOWER_FRAME ||--o| ALARM_EVENT : triggers
+    MISSION_RUN ||--o| CONFIRMATION : ends_with
+
+    MISSION_RUN {
+        string mission_id
+        datetime start_time
+        datetime end_time
+        string status
+        float bearing
+    }
+    TOWER_FRAME {
+        string frame_id
+        string image_path
+        float changed_area
+        datetime timestamp
+    }
+    ALARM_EVENT {
+        string alarm_id
+        int centroid_x
+        int centroid_y
+        float bearing
+    }
+    FLIGHT_LOG {
+        int step
+        float x
+        float y
+        float z
+        float smoke_density
+    }
+    MISSION_IMAGE {
+        string image_id
+        string type
+        string path
+    }
+    CONFIRMATION {
+        string method
+        float distance
+        bool fire_confirmed
+    }</div>
+<p>Important data artifacts:</p>
+<table><thead><tr>
+<th>Data Artifact</th>
+<th>Current Storage</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>Baseline frame</td>
+<td>autonomousflight/output/BASELINE_*.png</td>
+<td>Clear reference image</td>
+</tr>
+<tr>
+<td>Monitor frame</td>
+<td>autonomousflight/output/MONITOR_*.png</td>
+<td>Tower monitoring history</td>
+</tr>
+<tr>
+<td>Alarm image</td>
+<td>autonomousflight/output/ALARM_*_ANNOTATED_*.png</td>
+<td>Evidence for detection and bearing</td>
+</tr>
+<tr>
+<td>Bearing frame</td>
+<td>autonomousflight/output/bearing_nav/*.png</td>
+<td>Drone view during approach</td>
+</tr>
+<tr>
+<td>Scan images</td>
+<td>autonomousflight/output/mission/scan_*.png</td>
+<td>Fire confirmation evidence</td>
+</tr>
+<tr>
+<td>Dashboard log</td>
+<td>autonomousflight/output/dashboard.log</td>
+<td>Mission timeline and events</td>
+</tr>
+<tr>
+<td>PPO model</td>
+<td>autonomousflight/models/ppo_forest_final.zip</td>
+<td>Learned policy output</td>
+</tr>
+<tr>
+<td>Mission report JSON</td>
+<td>autonomousflight/output/mission/mission_report_*.json</td>
+<td>Structured mission result when generated</td>
+</tr>
+</tbody></table>
+<h2>7. Implementation and Screenshots</h2>
+<p>In this section, important code blocks and visual evidence of the project&#39;s current state are provided. The screenshots are explained in detail to demonstrate the implemented features.</p>
+<p>The project is implemented mainly in Python, HTML, CSS, and JavaScript. The UAV and sensor interaction happens through AirSim APIs [8]. Image processing is done with OpenCV [12]. The reinforcement learning part uses PPO [9], Stable-Baselines3 [10], PyTorch [20], and a Gymnasium-style environment [11].</p>
+<h3>7.1 Tower Detection Implementation</h3>
+<p>The tower module captures a baseline frame, captures later frames, computes grayscale frame difference, applies HSV smoke/fire masks, removes exclusion zones, finds contours, and calculates the centroid of the largest region. The centroid is then converted into a bearing using camera FOV and tower yaw.</p>
+<p>Actual recorded output:</p>
+<p><figure><img src="../autonomousflight/output/ALARM_0004_4_ANNOTATED_20260511_184457.png" alt="Annotated tower alarm frame"><figcaption>Annotated tower alarm frame</figcaption></figure></p>
+<p>Figure 1. Actual tower alarm image from the recorded mission. It shows the detected region, centroid, bearing, and changed area.</p>
+<h3>7.2 Drone Flight Screenshot Placeholder</h3>
+<p><figure><img src="assets/drone_flight_placeholder.png" alt="Drone flight placeholder"><figcaption>Drone flight placeholder</figcaption></figure></p>
+<p>Figure 2. Placeholder for drone flying toward the fire.</p>
+<p>Photo prompt: Drone flying toward a visible smoke plume or fire source over forest terrain during Phase A bearing navigation.</p>
+<h3>7.3 Dashboard Screenshot Placeholder</h3>
+<p><figure><img src="assets/dashboard_placeholder.png" alt="Dashboard placeholder"><figcaption>Dashboard placeholder</figcaption></figure></p>
+<p>Figure 3. Placeholder for dashboard screenshot.</p>
+<p>Photo prompt: Dashboard showing mission status, live console logs, mission timer, Sector C map, and photo gallery after fire confirmation.</p>
+<h3>7.4 Close-Range Confirmation Screenshots</h3>
+<p>The mission phase captured five scan images near the fire. In the recorded run, fire-colored pixels were detected in all scan directions.</p>
+<p><figure><img src="assets/scan_contact_sheet.png" alt="Scan contact sheet"><figcaption>Scan contact sheet</figcaption></figure></p>
+<p>Figure 4. Actual confirmation scan images from the mission output.</p>
+<table><thead><tr>
+<th>Scan Direction</th>
+<th>Fire-Colored Pixels</th>
+</tr></thead><tbody>
+<tr>
+<td>North</td>
+<td>3,801</td>
+</tr>
+<tr>
+<td>East</td>
+<td>5,803</td>
+</tr>
+<tr>
+<td>South</td>
+<td>7,086</td>
+</tr>
+<tr>
+<td>West</td>
+<td>2,913</td>
+</tr>
+<tr>
+<td>Downward</td>
+<td>5,756</td>
+</tr>
+</tbody></table>
+<h3>7.5 Implementation Summary</h3>
+<table><thead><tr>
+<th>Module / File</th>
+<th>Implementation Role</th>
+</tr></thead><tbody>
+<tr>
+<td>autonomousflight/scripts/ai_tower_monitor.py</td>
+<td>Tower monitoring, alarm logic, bearing calculation, mission dispatch</td>
+</tr>
+<tr>
+<td>autonomousflight/scripts/bearing_navigator.py</td>
+<td>Phase A bearing navigation, cross-track correction, smoke density handoff</td>
+</tr>
+<tr>
+<td>autonomousflight/scripts/ppo_environment.py</td>
+<td>Custom Gymnasium-style AirSim environment for PPO training/control</td>
+</tr>
+<tr>
+<td>autonomousflight/scripts/ppo_navigator.py</td>
+<td>PPO inference mode for trained model navigation</td>
+</tr>
+<tr>
+<td>autonomousflight/scripts/map_generator.py</td>
+<td>Seed-based placement of trees and fire actor in the AirSim scene</td>
+</tr>
+<tr>
+<td>autonomousflight/scripts/test_map_generator.py</td>
+<td>Verification tests for actors, seeds, distance, and bounds</td>
+</tr>
+<tr>
+<td>Dashboard/dashboard_server.py</td>
+<td>Local web server, status API, photo API, server-sent events, log watcher</td>
+</tr>
+<tr>
+<td>Dashboard/dashboard.js</td>
+<td>Dashboard state machine, console log display, photo gallery, mission status</td>
+</tr>
+</tbody></table>
+<h3>7.6 Additional Evidence That Can Strengthen the Report</h3>
+<p>The report can be made stronger by adding more direct visual and numerical evidence from the project. These additions are optional, but they would make the project easier to defend because they show not only the final result, but also the reasoning, limitations, and validation process.</p>
+<table><thead><tr>
+<th>Additional Material</th>
+<th>Why It Helps</th>
+<th>What to Add</th>
+</tr></thead><tbody>
+<tr>
+<td>Real dashboard screenshot</td>
+<td>Shows that the system is not only an algorithm, but also has a monitoring interface</td>
+<td>Replace the pink dashboard placeholder with your actual dashboard image</td>
+</tr>
+<tr>
+<td>Real drone flying toward fire screenshot/photo</td>
+<td>Makes the autonomous mission visually understandable</td>
+<td>Replace the orange drone placeholder with your AirSim or real drone flight image</td>
+</tr>
+<tr>
+<td>Top-down flight trajectory</td>
+<td>Shows the path from dispatch to confirmation</td>
+<td>Add a map-style image with tower location, initial UAV position, bearing line, handoff point, and confirmation point</td>
+</tr>
+<tr>
+<td>Parameter sensitivity table</td>
+<td>Explains why threshold, minimum area, and consecutive-frame settings were selected</td>
+<td>Compare detection threshold, minimum contour area, false alarms, and missed detections</td>
+</tr>
+<tr>
+<td>Ablation comparison</td>
+<td>Defends the hybrid approach</td>
+<td>Compare rule-only, PPO-only, and hybrid navigation in one table</td>
+</tr>
+<tr>
+<td>Failure case screenshots</td>
+<td>Shows engineering honesty and robustness</td>
+<td>Add examples such as weak smoke, wrong bearing, collision, timeout, or no-fire scenario</td>
+</tr>
+<tr>
+<td>Detection validation table</td>
+<td>Supports the result discussion with measurable evidence</td>
+<td>Include fire/no-fire test cases, alarm status, bearing output, handoff status, and confirmation result</td>
+</tr>
+<tr>
+<td>Reward curve or training summary</td>
+<td>Supports the PPO implementation</td>
+<td>Add training reward graph, collision rate, success rate, or final checkpoint summary</td>
+</tr>
+<tr>
+<td>Real-world deployment sketch</td>
+<td>Shows future applicability</td>
+<td>Add a diagram showing camera tower, UAV, base station, operator, and emergency-response handoff</td>
+</tr>
+</tbody></table>
+<p>Recommended photo prompts/placeholders:</p>
+<ul>
+<li><strong>Top-down trajectory placeholder:</strong> &quot;Top-down technical map of a forest fire UAV mission, fixed watchtower, drone start point, bearing line, handoff point, and final fire confirmation point, clean engineering report style.&quot;</li>
+<li><strong>Failure case placeholder:</strong> &quot;Simulation screenshot of an autonomous drone in a dense forest mission encountering an obstacle or weak smoke signal, technical report placeholder style.&quot;</li>
+<li><strong>Real-world deployment placeholder:</strong> &quot;Engineering diagram style image showing a forest watchtower camera detecting smoke and dispatching a quadcopter drone toward a small forest fire, with an operator dashboard nearby.&quot;</li>
+</ul>
+<h2>8. Project Management and Planning</h2>
+<p>This section provides a detailed timeline of the development phases across the eight-month project period (October 2025 – May 2026), a sprint-level work breakdown, a visual Gantt schedule, milestone tracking, and a risk analysis with actual outcomes.</p>
+<p>The project was developed in an iterative, Agile-inspired engineering style [18]. Each sprint targeted one or two functional modules, which were integrated and tested before the next sprint began. This iterative approach was especially appropriate because simulation, perception, navigation, and dashboard modules each had independent failure modes and required repeated adjustment cycles. Project planning followed established project management ideas such as dividing work into deliverables, identifying risks early, and validating outputs progressively [17].</p>
+<h3>8.1 Work Breakdown Structure (WBS)</h3>
+<p>The total development effort was divided into eight major phases, each with a set of concrete deliverables. The table below maps each phase to its calendar period, the work packages executed, and the evidence output produced.</p>
+<table><thead><tr>
+<th>Phase</th>
+<th>Period</th>
+<th>Work Package</th>
+<th>Deliverable / Output</th>
+</tr></thead><tbody>
+<tr>
+<td>Phase 0</td>
+<td>Oct 2025</td>
+<td>Problem scoping, CENG400 design proposal, literature survey</td>
+<td>Research notes, academic references, initial architecture sketch</td>
+</tr>
+<tr>
+<td>Phase 1</td>
+<td>Oct–Nov 2025</td>
+<td>AirSim + Unreal Engine integration, sensor configuration, physics validation</td>
+<td>Working multirotor in forest scene with RGB camera, depth camera, and IMU</td>
+</tr>
+<tr>
+<td>Phase 2</td>
+<td>Nov–Dec 2025</td>
+<td>Tower camera module: baseline capture, frame differencing, HSV fire/smoke masking, contour detection, bearing formula</td>
+<td><code>ai_tower_monitor.py</code>, annotated alarm images, bearing output in logs</td>
+</tr>
+<tr>
+<td>Phase 3</td>
+<td>Dec 2025–Jan 2026</td>
+<td>Bearing navigator: cross-track correction, altitude hold, smoke density monitoring, phase-handoff logic</td>
+<td><code>bearing_navigator.py</code>, flight frame snapshots, handoff trigger logs</td>
+</tr>
+<tr>
+<td>Phase 4</td>
+<td>Jan–Feb 2026</td>
+<td>PPO environment design: Gymnasium-style API, depth observation, target-direction vector, reward shaping, collision handling</td>
+<td><code>ppo_environment.py</code>, initial training runs, reward curve plots</td>
+</tr>
+<tr>
+<td>Phase 5</td>
+<td>Feb–Mar 2026</td>
+<td>PPO training and tuning: hyperparameter search, reward rate adjustment, altitude descent parameters, PPO checkpoint management</td>
+<td><code>train_ppo.py</code>, trained policy <code>ppo_forest_final.zip</code>, survival rate metrics</td>
+</tr>
+<tr>
+<td>Phase 6</td>
+<td>Mar–Apr 2026</td>
+<td>Fire confirmation module: 360-degree scan, HSV fire pixel counting, confirmation event logging, scan image saving</td>
+<td>Scan images, confirmation distance measurement (4.3 m in recorded run)</td>
+</tr>
+<tr>
+<td>Phase 7</td>
+<td>Apr 2026</td>
+<td>Map generator: seed-based tree/fire actor placement, bounds validation, minimum-distance enforcement; connection and flight tests</td>
+<td><code>map_generator.py</code>, <code>test_map_generator.py</code>, repeatability verification</td>
+</tr>
+<tr>
+<td>Phase 8</td>
+<td>Apr–May 2026</td>
+<td>Dashboard development: Flask-style server, Server-Sent Events log streaming, photo gallery, mission status API, mission timer</td>
+<td><code>dashboard_server.py</code>, <code>dashboard.js</code>, <code>index.html</code>, <code>index.css</code></td>
+</tr>
+<tr>
+<td>Phase 9</td>
+<td>May 2026</td>
+<td>End-to-end integration test, mission recording, privacy masking for coordinates in dashboard console, final evidence collection</td>
+<td>Recorded mission run, alarm images, scan contact sheet, dashboard log</td>
+</tr>
+<tr>
+<td>Phase 10</td>
+<td>May 2026</td>
+<td>Report writing, UML diagrams, reference consolidation, CENG401 submission</td>
+<td><code>CENG401_Detailed_Project_Report.md</code>, final defense preparation</td>
+</tr>
+</tbody></table>
+<h3>8.2 Gantt Schedule</h3>
+<p>The following Gantt chart summarizes the high-level schedule across the eight-month development window.</p>
+<div class="mermaid">gantt
+    title Autonomous UAV Fire Detection — Project Timeline (Oct 2025 – May 2026)
+    dateFormat  YYYY-MM-DD
+    axisFormat  %b %Y
+
+    section Research &amp; Design
+    Problem scoping &amp; literature review       :done, p0, 2025-10-01, 2025-10-31
+    CENG400 design proposal                  :done, p0b, 2025-10-15, 2025-11-15
+
+    section Simulation Setup
+    AirSim + Unreal Engine integration       :done, p1, 2025-10-20, 2025-12-01
+    Sensor configuration &amp; physics tests     :done, p1b, 2025-11-01, 2025-12-01
+
+    section Tower Detection
+    Baseline capture &amp; frame differencing    :done, p2a, 2025-11-15, 2025-12-15
+    HSV masking, contour detection, bearing  :done, p2b, 2025-12-01, 2026-01-10
+
+    section Bearing Navigation
+    Bearing navigator &amp; altitude hold        :done, p3a, 2025-12-15, 2026-01-31
+    Smoke density handoff logic              :done, p3b, 2026-01-15, 2026-02-10
+
+    section PPO Environment &amp; Training
+    Gymnasium env design &amp; reward shaping    :done, p4, 2026-01-15, 2026-02-28
+    PPO hyperparameter tuning &amp; training     :done, p5, 2026-02-01, 2026-03-31
+
+    section Confirmation &amp; Map Generator
+    360-degree scan &amp; fire confirmation      :done, p6, 2026-03-01, 2026-04-15
+    Map generator (seed-based placement)     :done, p7, 2026-03-15, 2026-04-30
+
+    section Dashboard
+    Server-Sent Events log streaming         :done, p8a, 2026-04-01, 2026-04-30
+    Dashboard UI, photo gallery, status API  :done, p8b, 2026-04-15, 2026-05-10
+
+    section Integration &amp; Report
+    End-to-end mission recording             :done, p9, 2026-05-01, 2026-05-15
+    Privacy masking &amp; dashboard polish       :done, p9b, 2026-05-10, 2026-05-18
+    CENG401 report &amp; defense preparation     :done, p10, 2026-05-11, 2026-05-18</div>
+<h3>8.3 Key Milestones</h3>
+<table><thead><tr>
+<th>#</th>
+<th>Milestone</th>
+<th>Target Date</th>
+<th>Status</th>
+</tr></thead><tbody>
+<tr>
+<td>M1</td>
+<td>AirSim multirotor flyable in Unreal forest scene</td>
+<td>Nov 2025</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>Tower alarm image generated with bearing angle</td>
+<td>Dec 2025</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>UAV follows bearing ray and saves flight frames</td>
+<td>Jan 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Smoke density handoff triggers PPO phase</td>
+<td>Feb 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>PPO agent trained and able to avoid trees</td>
+<td>Mar 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M6</td>
+<td>360-degree scan confirms fire at close range</td>
+<td>Apr 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M7</td>
+<td>Seed-based map generator with test suite</td>
+<td>Apr 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M8</td>
+<td>Dashboard live-streams logs and photo gallery</td>
+<td>May 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M9</td>
+<td>Full end-to-end mission recorded and validated</td>
+<td>May 2026</td>
+<td>✅ Achieved</td>
+</tr>
+<tr>
+<td>M10</td>
+<td>Final report submitted and defense ready</td>
+<td>May 2026</td>
+<td>✅ Achieved</td>
+</tr>
+</tbody></table>
+<h3>8.4 Sprint Summary</h3>
+<p>Each sprint lasted approximately two to four weeks and targeted specific modules. The table below summarizes the sprint outputs.</p>
+<table><thead><tr>
+<th>Sprint</th>
+<th>Approx. Period</th>
+<th>Focus Area</th>
+<th>Key Outcome</th>
+</tr></thead><tbody>
+<tr>
+<td>S1</td>
+<td>Oct 2025</td>
+<td>Research &amp; scoping</td>
+<td>Architecture decision: AI Tower + Bearing + PPO hybrid</td>
+</tr>
+<tr>
+<td>S2</td>
+<td>Nov 2025</td>
+<td>Simulation foundation</td>
+<td>AirSim multirotor with sensors operational in UE forest</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>Dec 2025</td>
+<td>Tower detection</td>
+<td><code>ai_tower_monitor.py</code> producing annotated alarm images</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>Jan 2026</td>
+<td>Bearing navigation</td>
+<td><code>bearing_navigator.py</code> tracking bearing ray with cross-track correction</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>Feb 2026</td>
+<td>PPO environment</td>
+<td><code>ppo_environment.py</code> with depth obs., target direction, reward function</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>Mar 2026</td>
+<td>PPO training</td>
+<td>Reward rate tuning; altitude descent parameters (DESCENT_FLOOR_Z=65) stabilized</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>Apr 2026</td>
+<td>Confirmation &amp; map</td>
+<td>360-degree scan, <code>map_generator.py</code>, <code>test_map_generator.py</code></td>
+</tr>
+<tr>
+<td>S8</td>
+<td>Apr–May 2026</td>
+<td>Dashboard</td>
+<td>Full dashboard with SSE streaming, mission timer, photo gallery</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>May 2026</td>
+<td>Integration &amp; polish</td>
+<td>End-to-end mission run; coordinate privacy masking; report writing</td>
+</tr>
+</tbody></table>
+<h3>8.5 Risk Management</h3>
+<p>The following risks were identified at project start and tracked throughout development. The &quot;Actual Outcome&quot; column documents what happened in practice.</p>
+<table><thead><tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation Plan</th>
+<th>Actual Outcome</th>
+</tr></thead><tbody>
+<tr>
+<td>False alarm from lighting or water reflection</td>
+<td>Medium</td>
+<td>High</td>
+<td>HSV filtering, contour area threshold, exclusion zones, consecutive detection requirement</td>
+<td>Mitigated: multi-frame confirmation and HSV tuning reduced false positives</td>
+</tr>
+<tr>
+<td>UAV collision with terrain or trees</td>
+<td>High</td>
+<td>High</td>
+<td>Controlled cruising altitude, depth observation, collision checks in PPO environment</td>
+<td>Partially mitigated: altitude hold (DESCENT_FLOOR_Z=65) stabilized flight; depth obs. guards trees</td>
+</tr>
+<tr>
+<td>PPO overfitting to one scenario</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Seed-based randomized maps, multiple fire positions planned</td>
+<td>Partially mitigated: map generator with seeds added; broader randomization is future work</td>
+</tr>
+<tr>
+<td>AirSim API instability or simulator crash</td>
+<td>Medium</td>
+<td>High</td>
+<td>Staged testing, reset logic, try/except wrappers, mission logs</td>
+<td>Mitigated: reset and reconnect logic implemented; staged module testing reduced failures</td>
+</tr>
+<tr>
+<td>No exact fire coordinate at mission start</td>
+<td>Certain</td>
+<td>Low (by design)</td>
+<td>Use bearing navigation first; confirm at close range</td>
+<td>By design: bearing navigation fully resolved this constraint</td>
+</tr>
+<tr>
+<td>PPO training time too long</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Reward shaping to converge faster; reduce unnecessary exploration</td>
+<td>Mitigated: reward rate adjustment commit (2026-05-10) improved convergence speed</td>
+</tr>
+<tr>
+<td>Dashboard performance with live log streaming</td>
+<td>Low</td>
+<td>Medium</td>
+<td>Server-Sent Events (SSE) instead of polling; batched log updates</td>
+<td>Mitigated: SSE-based log streaming implemented with low overhead</td>
+</tr>
+<tr>
+<td>Report evidence missing or incomplete</td>
+<td>Low</td>
+<td>High</td>
+<td>Save alarm images, scan images, dashboard logs, mission JSON, scan contact sheet</td>
+<td>Mitigated: structured output folder with all evidence artifacts saved automatically</td>
+</tr>
+</tbody></table>
+<h2>9. Test Strategy and Validation</h2>
+<p>This section defines how requirements will be verified. It includes Test Cases (inputs vs. expected outputs) and outlines the strategy for Unit Testing, Integration Testing, and User Acceptance Testing.</p>
+<p>Testing was designed at multiple levels: component tests, integration tests, and mission validation. This is important because autonomous systems can fail even if individual modules appear to work separately.</p>
+<h3>9.1 Component Tests</h3>
+<table><thead><tr>
+<th>Test Area</th>
+<th>Test Description</th>
+<th>Evidence / Expected Result</th>
+</tr></thead><tbody>
+<tr>
+<td>AirSim connection</td>
+<td>Confirm simulator API responds</td>
+<td>Connection message in log</td>
+</tr>
+<tr>
+<td>Tower image capture</td>
+<td>Capture baseline and monitoring images</td>
+<td>PNG images saved in output folder</td>
+</tr>
+<tr>
+<td>Frame comparison</td>
+<td>Detect changed smoke/fire-like area</td>
+<td>Mask and annotated alarm image</td>
+</tr>
+<tr>
+<td>Bearing formula</td>
+<td>Convert centroid to bearing</td>
+<td>Bearing value in dashboard log</td>
+</tr>
+<tr>
+<td>Map generator</td>
+<td>Verify actors, seed repeatability, bounds, minimum tree distance</td>
+<td>test_map_generator.py output</td>
+</tr>
+<tr>
+<td>Dashboard server</td>
+<td>Serve status, photos, and SSE logs</td>
+<td>Browser dashboard updates</td>
+</tr>
+</tbody></table>
+<h3>9.2 Integration Validation</h3>
+<p>The recorded mission demonstrates an end-to-end scenario:</p>
+<table><thead><tr>
+<th>Metric</th>
+<th>Recorded Value</th>
+<th>Validation Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td>Tower image resolution</td>
+<td>1920 x 1080</td>
+<td>Sufficient for visual localization</td>
+</tr>
+<tr>
+<td>Monitoring interval</td>
+<td>5 s</td>
+<td>Periodic tower monitoring worked</td>
+</tr>
+<tr>
+<td>First detection hit</td>
+<td>3,921.5 changed pixels</td>
+<td>Smoke/fire change exceeded threshold</td>
+</tr>
+<tr>
+<td>Confirmed alarm area</td>
+<td>50,742 changed pixels</td>
+<td>Strong detection evidence</td>
+</tr>
+<tr>
+<td>Calculated bearing</td>
+<td>207.38 degrees</td>
+<td>Bearing passed to UAV dispatch</td>
+</tr>
+<tr>
+<td>Fire actor position</td>
+<td>(-238.20, 24.20) m</td>
+<td>Simulation target location detected</td>
+</tr>
+<tr>
+<td>Smoke density at handoff</td>
+<td>20.09 percent</td>
+<td>Handoff threshold exceeded</td>
+</tr>
+<tr>
+<td>Fire confirmation distance</td>
+<td>4.3 m</td>
+<td>Close-range scan confirmed fire</td>
+</tr>
+<tr>
+<td>Alarm-to-landing duration</td>
+<td>about 5 min 46 s</td>
+<td>Full response sequence completed</td>
+</tr>
+</tbody></table>
+<h3>9.3 Validation Limitations</h3>
+<p>The current validation is mainly a proof-of-concept mission. It shows that the pipeline can work, but it does not prove field reliability. A stronger validation plan would repeat the test across many random seeds, fire locations, tree densities, lighting conditions, and smoke intensities. Future evaluation should measure false alarm rate, missed detection rate, bearing error, collision rate, average mission time, and success rate across many trials.</p>
+<h2>10. Social, Economic, and Ethical Impact</h2>
+<p>This section discusses the cost analysis and sustainability of the project, as well as its ethical implications.</p>
+<p>The social value of the project is early wildfire awareness. Wildfires can damage ecosystems, homes, infrastructure, and human health [1]. A system that detects fire earlier and sends a UAV for confirmation could help emergency teams respond faster.</p>
+<p>The economic impact could also be positive. Faster confirmation may reduce unnecessary human patrols and may help emergency teams allocate resources earlier. However, a real-world system would require investment in UAV hardware, maintenance, batteries, communication infrastructure, operator training, and legal compliance.</p>
+<p>The ethical impact must be considered carefully. UAVs can capture images from the air, so privacy must be protected. The system should avoid collecting unnecessary human data, should not fly over restricted areas without permission, and should keep a human operator in the loop for real emergency decisions. These points are consistent with professional computing ethics, including public safety, privacy, and responsible system deployment [19].</p>
+<p>Safety is also an ethical issue. A real UAV should include geofencing, emergency landing, communication-loss behavior, obstacle avoidance, and regulatory compliance. The current system is simulation-only, so it should not be presented as ready for real deployment without additional safety engineering.</p>
+<h2>11. Technologies</h2>
+<p>This section explains the technology stack planned to be used in the project (programming languages, frameworks, libraries, databases, etc.). In addition, the overall system architecture is presented using an architectural diagram or schema.</p>
+<p>The proposed system is developed and evaluated within a simulation-based framework using a combination of modern game engines, machine learning libraries, and data processing tools. Unreal Engine is employed to generate a realistic forest environment, enabling high-fidelity visual rendering and complex under-canopy scenarios. Microsoft AirSim is integrated with Unreal Engine to simulate drone dynamics, physics-based motion, and onboard sensor data, including RGB and depth cameras.</p>
+<p>Python is used as the primary programming language due to its extensive ecosystem for artificial intelligence and robotics research. Deep Reinforcement Learning models are implemented using PyTorch, while the Proximal Policy Optimization (PPO) algorithm is realized through the Stable-Baselines3 framework, providing a reliable and efficient reinforcement learning pipeline. For fire and smoke detection, OpenCV is utilized to perform real-time image processing and color-based anomaly detection on RGB camera data.</p>
+<table><thead><tr>
+<th>Technology</th>
+<th>Use in Project</th>
+<th>Reference</th>
+</tr></thead><tbody>
+<tr>
+<td>AirSim</td>
+<td>Multirotor simulation, camera streams, movement commands, collision information</td>
+<td>[8]</td>
+</tr>
+<tr>
+<td>Unreal Engine scene</td>
+<td>Forest terrain, trees, fire/smoke actor, fixed tower viewpoint</td>
+<td>[8]</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Main implementation language for simulation, vision, and RL modules</td>
+<td>Project implementation</td>
+</tr>
+<tr>
+<td>OpenCV</td>
+<td>Frame differencing, HSV filtering, contour detection, annotated images</td>
+<td>[12]</td>
+</tr>
+<tr>
+<td>NumPy</td>
+<td>Image array operations and vector math</td>
+<td>[21]</td>
+</tr>
+<tr>
+<td>Gymnasium</td>
+<td>Environment API for reset, step, observation, action, reward</td>
+<td>[11]</td>
+</tr>
+<tr>
+<td>Stable-Baselines3</td>
+<td>PPO implementation and reinforcement learning utilities</td>
+<td>[10]</td>
+</tr>
+<tr>
+<td>PyTorch</td>
+<td>Neural network backend used by RL stack</td>
+<td>[20]</td>
+</tr>
+<tr>
+<td>HTML/CSS/JavaScript</td>
+<td>Dashboard interface and client-side state visualization</td>
+<td>Project implementation</td>
+</tr>
+<tr>
+<td>Server-Sent Events</td>
+<td>Streaming dashboard log updates</td>
+<td>Project implementation</td>
+</tr>
+</tbody></table>
+<h2>12. Conclusion</h2>
+<p>This report summarizes the scope, objectives, justification, and technical approach of the term project and is intended to serve as a guiding reference for the subsequent stages of the study.</p>
+<p>This project demonstrates an autonomous UAV simulation pipeline for early fire detection and confirmation. The system starts with incomplete information, which is realistic for early fire detection. The tower camera provides a bearing rather than a full map or exact fire coordinate. The UAV then approaches the suspected region and confirms the fire from close range. This explains why the project uses a hybrid approach: rule-based methods are used for structured and explainable tasks such as image differencing, HSV filtering, thresholding, and bearing calculation, while PPO-based navigation is used for the more uncertain close-range phase.</p>
+<p>The recorded mission provides concrete evidence that the integrated pipeline works in simulation. The tower detected a large smoke/fire change region, calculated a bearing, dispatched the drone, handed off after smoke detection, captured close-range scans, confirmed the fire, and completed the mission. The project is not a final real-world wildfire response product, but it is a strong simulation prototype. Future work should focus on larger test sets, deep learning fire/smoke detection, improved obstacle-aware navigation, more realistic environmental conditions, and real UAV safety planning.</p>
+<p>Overall, the strongest outcome of this study is not only that the UAV can reach and confirm a simulated fire, but that the project connects detection, navigation, confirmation, evidence collection, and operator visualization into one coherent workflow. This makes the project valuable as an engineering prototype: every stage produces observable evidence, and each design choice can be justified by the uncertainty of early fire detection. With additional testing, stronger datasets, and real-world safety constraints, the same architecture could be extended toward practical decision-support systems for wildfire monitoring.</p>
+<h2>References</h2>
+<p>[1] United Nations Environment Programme and GRID-Arendal. (2022). Spreading like Wildfire: The Rising Threat of Extraordinary Landscape Fires. https://wedocs.unep.org/handle/20.500.11822/38372</p>
+<p>[2] Alkhatib, A. A. A. (2014). A Review on Forest Fire Detection Techniques. International Journal of Distributed Sensor Networks, 2014, Article ID 597368. https://doi.org/10.1155/2014/597368</p>
+<p>[3] Barmpoutis, P., Papaioannou, P., Dimitropoulos, K., &amp; Grammalidis, N. (2020). A Review on Early Forest Fire Detection Systems Using Optical Remote Sensing. Sensors, 20(22), 6442. https://doi.org/10.3390/s20226442</p>
+<p>[4] Chaturvedi, S., Khanna, P., &amp; Ojha, A. (2022). A survey on vision-based outdoor smoke detection techniques for environmental safety. ISPRS Journal of Photogrammetry and Remote Sensing, 185, 158-187. https://doi.org/10.1016/j.isprsjprs.2022.01.013</p>
+<p>[5] Yuan, C., Zhang, Y., &amp; Liu, Z. (2015). A survey on technologies for automatic forest fire monitoring, detection, and fighting using unmanned aerial vehicles and remote sensing techniques. Canadian Journal of Forest Research, 45(7), 783-792. https://doi.org/10.1139/cjfr-2014-0347</p>
+<p>[6] Bouguettaya, A., Zarzour, H., Taberkit, A. M., &amp; Kechida, A. (2022). A review on early wildfire detection from unmanned aerial vehicles using deep learning-based computer vision algorithms. Signal Processing, 190, 108309. https://doi.org/10.1016/j.sigpro.2021.108309</p>
+<p>[7] Tzoumas, G., Pitonakova, L., Salinas, L., Scales, C., Richardson, T., Arvin, F., &amp; Hauert, S. (2023). Wildfire detection in large-scale environments using force-based control for swarms of UAVs. Swarm Intelligence, 17, 89-115. https://doi.org/10.1007/s11721-022-00218-9</p>
+<p>[8] Shah, S., Dey, D., Lovett, C., &amp; Kapoor, A. (2017). AirSim: High-Fidelity Visual and Physical Simulation for Autonomous Vehicles. Field and Service Robotics, 621-635. https://doi.org/10.1007/978-3-319-67361-5_40</p>
+<p>[9] Schulman, J., Wolski, F., Dhariwal, P., Radford, A., &amp; Klimov, O. (2017). Proximal Policy Optimization Algorithms. arXiv:1707.06347. https://doi.org/10.48550/arXiv.1707.06347</p>
+<p>[10] Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., &amp; Dormann, N. (2021). Stable-Baselines3: Reliable Reinforcement Learning Implementations. Journal of Machine Learning Research, 22(268), 1-8. https://jmlr.org/papers/v22/20-1364.html</p>
+<p>[11] Towers, M., Kwiatkowski, A., Terry, J., Balis, J. U., De Cola, G., Deleu, T., Goulao, M., Kallinteris, A., Krimmel, M., KG, A., et al. (2024). Gymnasium: A Standard Interface for Reinforcement Learning Environments. arXiv:2407.17032. https://arxiv.org/abs/2407.17032</p>
+<p>[12] Bradski, G. (2000). The OpenCV Library. Dr. Dobb&#39;s Journal of Software Tools. OpenCV project information: https://opencv.org/about/</p>
+<p>[13] ISO/IEC/IEEE. (2018). ISO/IEC/IEEE 29148:2018 Systems and software engineering - Life cycle processes - Requirements engineering. https://www.iso.org/standard/72089.html</p>
+<p>[14] ISO/IEC/IEEE. (2022). ISO/IEC/IEEE 42010:2022 Software, systems and enterprise - Architecture description. https://www.iso.org/standard/74393.html</p>
+<p>[15] ISO/IEC. (2023). ISO/IEC 25010:2023 Systems and software engineering - Systems and software Quality Requirements and Evaluation (SQuaRE) - Product quality model. https://www.iso.org/standard/78176.html</p>
+<p>[16] Object Management Group. (2017). OMG Unified Modeling Language Version 2.5.1. https://www.omg.org/spec/UML/2.5.1/</p>
+<p>[17] Project Management Institute. (2021). A Guide to the Project Management Body of Knowledge (PMBOK Guide), Seventh Edition. https://www.pmi.org/pmbok-guide-standards/foundational/pmbok</p>
+<p>[18] Schwaber, K., &amp; Sutherland, J. (2020). The Scrum Guide. https://scrumguides.org/scrum-guide.html</p>
+<p>[19] Association for Computing Machinery. (2018). ACM Code of Ethics and Professional Conduct. https://www.acm.org/code-of-ethics</p>
+<p>[20] Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga, L., et al. (2019). PyTorch: An Imperative Style, High-Performance Deep Learning Library. Advances in Neural Information Processing Systems 32. https://papers.neurips.cc/paper/2019/hash/bdbca288fee7f92f2bfa9f7012727740-Abstract.html</p>
+<p>[21] Harris, C. R., Millman, K. J., van der Walt, S. J., Gommers, R., Virtanen, P., Cournapeau, D., Wieser, E., Taylor, J., Berg, S., Smith, N. J., et al. (2020). Array programming with NumPy. Nature, 585, 357-362. https://doi.org/10.1038/s41586-020-2649-2</p>
+<p>[22] Yuan, C., Liu, Z., &amp; Zhang, Y. (2015). UAV-based forest fire detection and tracking using image processing techniques. In 2015 International Conference on Unmanned Aircraft Systems (ICUAS) (pp. 639-643). IEEE. https://doi.org/10.1109/ICUAS.2015.7152345</p>
+<p>[23] Akhloufi, M. A., Couturier, A., &amp; Castro, N. A. (2021). Unmanned Aerial Vehicles for Wildland Fires: Sensing, Perception, Cooperation and Assistance. Drones, 5(1), 15. https://doi.org/10.3390/drones5010015</p>
+<p>[24] Zhang, J., Li, W., Han, Z., Liu, J., Zhao, L., &amp; Dong, F. (2020). Forest fire detection system based on a deep learning algorithm and UAVs. Infrared Physics &amp; Technology, 111, 103554. https://doi.org/10.1016/j.infrared.2020.103554</p>
+<p>[25] Giglio, L., Schroeder, W., &amp; Justice, C. O. (2016). The collection 6 MODIS active fire detection algorithm and fire products. Remote Sensing of Environment, 178, 31-41. https://doi.org/10.1016/j.rse.2016.02.054</p>
+<p>[26] Toreyin, B. U., Dedeoglu, Y., Gudukbay, U., &amp; Cetin, A. E. (2006). Computer vision based method for real-time fire and flame detection. Pattern Recognition Letters, 27(1), 49-58. https://doi.org/10.1016/j.patrec.2005.06.015</p>
+<p>[27] Celik, T., &amp; Demirel, H. (2009). Fire detection in video sequences using a generic color model. Fire Safety Journal, 44(2), 147-158. https://doi.org/10.1016/j.firesaf.2008.05.005</p>
+<p>[28] Foggia, P., Saggese, A., &amp; Vento, M. (2015). Real-time fire detection for video-surveillance applications using a combination of experts based on color, shape, and motion. IEEE Transactions on Circuits and Systems for Video Technology, 25(9), 1545-1556. https://doi.org/10.1109/TCSVT.2015.2392531</p>
+<p>[29] Hart, P. E., Nilsson, N. J., &amp; Raphael, B. (1968). A formal basis for the heuristic determination of minimum cost paths. IEEE Transactions on Systems Science and Cybernetics, 4(2), 100-107. https://doi.org/10.1109/TSSC.1968.300136</p>
+<p>[30] LaValle, S. M. (1998). Rapidly-exploring random trees: A new tool for path planning. Technical Report TR 98-11, Iowa State University. https://lavalle.pl/papers/Lav98c.pdf</p>
+<p>[31] Kavraki, L. E., Svestka, P., Latombe, J.-C., &amp; Overmars, M. H. (1996). Probabilistic roadmaps for path planning in high-dimensional configuration spaces. IEEE Transactions on Robotics and Automation, 12(4), 566-580. https://doi.org/10.1109/70.508439</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' }); }
+</script>
+</body>
+</html>

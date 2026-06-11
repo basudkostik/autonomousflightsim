@@ -60,20 +60,29 @@ MIN_ALTITUDE = -10                  # Don't go too high in PPO phase
 
 # Homing phase — direct fly-toward-fire when far away
 HOMING_DISTANCE = 20.0             # Metres: beyond this, use direct homing not PPO
-HOMING_SPEED = 5.0                 # m/s direct homing speed (was 10, too fast)
+HOMING_SPEED = 5.0                 # m/s full homing speed (far from fire)
+
+# Close approach — slow down in BOTH modes when within this range.
+# This eliminates the speed jerk at the HOMING→PPO transition at 20m.
+# Both modes will be doing ~2.5 m/s as the drone crosses the 20m boundary.
+CLOSE_DISTANCE = 30.0              # Metres: start slowing down
+HOMING_SPEED_CLOSE = 2.5          # m/s homing speed when dist < CLOSE_DISTANCE
 
 # Descent phase — start descending when within this distance
 DESCENT_NEAR_FIRE = 20.0           # Metres: start descending when closer than this
-DESCENT_STEP = 0.5                 # Metres to descend per step
-DESCENT_FLOOR_Z = 0.0             # Floor Z: origin altitude (user says we can go under 0)
+DESCENT_STEP = 1.5                 # Metres to descend per step
+DESCENT_FLOOR_Z = 65.0             # Floor Z: 65m below origin for mountain slopes
 
 # 360° scan phase — take 4 photos when very close to fire
 SCAN_DISTANCE = 5.0                # Metres: trigger 360° scan when closer than this
 
 # Action limits (PPO phase only — homing phase uses HOMING_SPEED)
-MAX_FORWARD_VEL = 12.0              # m/s (increased for faster approach)
-MAX_LATERAL_VEL = 2.0               # m/s
-MAX_YAW_RATE = 45.0                 # degrees/s
+# PPO far zone (20-30m): allow up to 2.5 m/s to match HOMING_SPEED_CLOSE
+# PPO close zone (<20m): cap at 2.0 m/s for fine-grained control
+MAX_FORWARD_VEL = 2.5              # m/s PPO forward max (matches HOMING_SPEED_CLOSE)
+MAX_FORWARD_VEL_CLOSE = 2.0       # m/s PPO forward max when dist < CLOSE_DISTANCE
+MAX_LATERAL_VEL = 1.0              # m/s
+MAX_YAW_RATE = 45.0                # degrees/s
 
 # Reward weights
 REWARD_PROGRESS = 2.0               # Progress signal toward fire (lowered with slower speed)
@@ -85,9 +94,14 @@ REWARD_TIME_PENALTY = -0.05
 # Fire confirmation distance (meters)
 FIRE_CONFIRM_DISTANCE = 5.0
 
-# Fire detection HSV (widened to catch yellows + oranges from above)
-FIRE_HSV_LOWER = np.array([0, 50, 150])
-FIRE_HSV_UPPER = np.array([40, 255, 255])
+# Fire detection HSV — two ranges to catch fire from above:
+#   Range 1: warm orange-red (H 0-25, high sat) — actual flame color
+#   Range 2: bright yellow-orange (H 15-35, high sat) — fire glow from altitude
+# Note: fire viewed from above at 5m looks like saturated orange, not pure red
+FIRE_HSV_LOWER = np.array([0,  100, 150])   # Saturated red-orange (not washed out)
+FIRE_HSV_UPPER = np.array([25, 255, 255])   # Up to orange
+FIRE_HSV_LOWER2 = np.array([15, 80,  200])  # Bright yellow-orange glow
+FIRE_HSV_UPPER2 = np.array([35, 255, 255])  # Up to yellow
 
 # Distance threshold for automatic confirmation (no HSV needed)
 # If the drone is this close, fire is confirmed by proximity alone
@@ -165,8 +179,8 @@ class AirSimFireEnv(gym.Env):
         self.prev_distance = None
         self.episode_count = 0
 
-        # Output directory
-        self.output_dir = os.path.join(os.path.dirname(__file__), "..", "output", "ppo_training")
+        # Output directory — mission photos saved here
+        self.output_dir = os.path.join(os.path.dirname(__file__), "..", "output", "mission")
         os.makedirs(self.output_dir, exist_ok=True)
 
     def _connect(self):
@@ -347,18 +361,32 @@ class AirSimFireEnv(gym.Env):
         self.client.armDisarm(True)
         time.sleep(0.3)
 
-        # Check if drone is already airborne (chained from PlumeTracker)
-        _, _, current_z = self._get_position()
-        already_airborne = current_z < -1.0  # More than 1m above ground
+        # Check if drone is already airborne using landed state (not Z coordinate)
+        # Z-based check fails on mountains where z > 0 (below origin) even when flying
+        try:
+            landed = self.client.getMultirotorState().landed_state
+            already_airborne = (landed.value == 0)  # 0 = Flying, 1 = Landed
+        except Exception:
+            _, _, current_z = self._get_position()
+            already_airborne = abs(current_z) > 1.0  # fallback
 
         if not already_airborne:
             print("  🛫 Taking off...", flush=True)
             self.client.takeoffAsync().join()
             time.sleep(0.5)
 
-        # Move to PPO nav altitude (inherits mountain altitude if chained)
-        print(f"  📡 Moving to nav altitude {abs(self.nav_altitude):.1f}m...", flush=True)
-        self.client.moveToZAsync(self.nav_altitude, 5).join()
+        # For episode 1 when chained: stay at current altitude (drone is already
+        # flying at the correct mountain altitude from BearingNavigator handoff).
+        # For subsequent episodes: move to nav_altitude (above origin reference).
+        _, _, current_z = self._get_position()
+        if self.is_chained and self.episode_count == 1:
+            # Stay where we are — nav_altitude may be above-origin which is wrong on mountain
+            target_z = current_z
+            print(f"  📡 Holding current altitude Z={current_z:+.1f}m (chained handoff)...", flush=True)
+        else:
+            target_z = self.nav_altitude
+            print(f"  📡 Moving to nav altitude Z={self.nav_altitude:+.1f}m...", flush=True)
+        self.client.moveToZAsync(target_z, 5).join()
         time.sleep(0.5)
 
         # Face toward fire so first observation is meaningful
@@ -372,6 +400,7 @@ class AirSimFireEnv(gym.Env):
         time.sleep(0.3)
 
         self.prev_distance = self._distance_to_fire()
+        # (no descent_z needed — we read actual z each step adaptively)
         obs = self._get_observation()
         info = {
             "episode": self.episode_count,
@@ -385,52 +414,62 @@ class AirSimFireEnv(gym.Env):
 
     def _do_360_scan(self):
         """
-        Take 4 photos at 90° intervals with camera at -15° pitch.
-        Provides 360° coverage for fire confirmation from directly above.
-        Returns True if fire detected in any of the 4 photos.
+        Take 5 photos:
+          - 4 directional shots at 90° intervals with camera at -70° pitch
+            (steep enough to see fire on the ground, not just horizon)
+          - 1 straight-down shot at -90° (for fire directly below)
+        Returns True if fire detected in any photo.
         """
         print(f"\n  📸 360° SCAN — fire within {SCAN_DISTANCE}m!", flush=True)
-        pitch_rad = math.radians(-45.0)  # Look steeply downward to see fire below
         fire_seen = False
 
-        for i, yaw_offset in enumerate([0, 90, 180, 270]):
-            # Rotate drone to each quadrant
-            x, y, z = self._get_position()
-            dx = self.fire_x - x
-            dy = self.fire_y - y
-            base_yaw = math.degrees(math.atan2(dy, dx))
+        scan_shots = [
+            (0,   -70.0, "N"),
+            (90,  -70.0, "E"),
+            (180, -70.0, "S"),
+            (270, -70.0, "W"),
+            (0,   -90.0, "DOWN"),   # Straight down for fire directly below
+        ]
+
+        x, y, z = self._get_position()
+        dx = self.fire_x - x
+        dy = self.fire_y - y
+        base_yaw = math.degrees(math.atan2(dy, dx))
+
+        for i, (yaw_offset, pitch_deg, label) in enumerate(scan_shots):
             target_yaw = base_yaw + yaw_offset
+            pitch_rad = math.radians(pitch_deg)
 
             try:
                 self.client.rotateToYawAsync(target_yaw).join()
-                time.sleep(0.3)
+                time.sleep(0.2)
             except Exception:
                 pass
 
-            # Set camera to -15° pitch for this scan direction
             camera_pose = airsim.Pose(
                 airsim.Vector3r(0, 0, 0),
                 airsim.to_quaternion(pitch_rad, 0, 0)
             )
             self.client.simSetCameraPose("front_center", camera_pose)
-            time.sleep(0.1)
+            time.sleep(0.15)
 
-            # Capture and save the scan photo
             rgb = self._get_rgb_image()
             if rgb is not None:
                 fname = os.path.join(
                     self.output_dir,
-                    f"scan360_{yaw_offset}deg_ep{self.episode_count}.png"
+                    f"scan_{label}_ep{self.episode_count}.png"
                 )
                 cv2.imwrite(fname, rgb)
-                print(f"    📷 Scan {i+1}/4 ({yaw_offset}°) saved → {os.path.basename(fname)}", flush=True)
+                print(f"    📷 Scan {i+1}/5 ({label} {pitch_deg}°) saved → {os.path.basename(fname)}", flush=True)
 
-                # Check for fire in this frame
+                # Check both HSV ranges for fire
                 hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
-                fire_mask = cv2.inRange(hsv, FIRE_HSV_LOWER, FIRE_HSV_UPPER)
-                if cv2.countNonZero(fire_mask) > 30:
+                mask1 = cv2.inRange(hsv, FIRE_HSV_LOWER,  FIRE_HSV_UPPER)
+                mask2 = cv2.inRange(hsv, FIRE_HSV_LOWER2, FIRE_HSV_UPPER2)
+                fire_pixels = cv2.countNonZero(cv2.bitwise_or(mask1, mask2))
+                if fire_pixels > 20:
                     fire_seen = True
-                    print(f"    🔥 Fire detected in scan {yaw_offset}°!", flush=True)
+                    print(f"    🔥 Fire detected in {label} scan! ({fire_pixels} px)", flush=True)
 
         return fire_seen
 
@@ -448,15 +487,15 @@ class AirSimFireEnv(gym.Env):
         x, y, z = self._get_position()
 
         # ─── Phase 1: DIRECT HOMING (dist > 20m) ──────────────
-        # PPO is untrained at start — using its random actions would cause
-        # the drone to wander. Instead, fly directly toward fire until close.
+        # Use full speed far away, slow down within CLOSE_DISTANCE to match
+        # the PPO speed at the transition boundary — no jerk at 20m switch.
         if current_distance > HOMING_DISTANCE:
             dx = self.fire_x - x
             dy = self.fire_y - y
-            dist = math.sqrt(dx**2 + dy**2)
-            vx = HOMING_SPEED * dx / dist
-            vy = HOMING_SPEED * dy / dist
-            # Also yaw toward fire for meaningful observations
+            dist_2d = math.sqrt(dx**2 + dy**2)
+            speed = HOMING_SPEED_CLOSE if current_distance < CLOSE_DISTANCE else HOMING_SPEED
+            vx = speed * dx / dist_2d
+            vy = speed * dy / dist_2d
             target_yaw = math.degrees(math.atan2(dy, dx))
             self.client.rotateToYawAsync(target_yaw)
             self.client.moveByVelocityZAsync(
@@ -466,21 +505,22 @@ class AirSimFireEnv(gym.Env):
             )
 
         # ─── Phase 2: PPO CONTROL (dist ≤ 20m) ────────────────
+        # Cap velocity lower when very close for fine-grained control
         else:
-            forward_vel = float(np.clip(action[0], 0, MAX_FORWARD_VEL))
+            fwd_cap = MAX_FORWARD_VEL_CLOSE if current_distance < CLOSE_DISTANCE else MAX_FORWARD_VEL
+            forward_vel = float(np.clip(action[0], 0, fwd_cap))
             lateral_vel = float(np.clip(action[1], -MAX_LATERAL_VEL, MAX_LATERAL_VEL))
             yaw_rate = float(np.clip(action[2], -MAX_YAW_RATE, MAX_YAW_RATE))
             yaw = math.radians(self._get_orientation())
             vx = forward_vel * math.cos(yaw) - lateral_vel * math.sin(yaw)
             vy = forward_vel * math.sin(yaw) + lateral_vel * math.cos(yaw)
 
-            # Descend when close to fire
-            target_alt = self.nav_altitude
+            # Descend when close to fire — adaptive: read CURRENT z each step
+            # Using an accumulator caused runaway commands into the ground.
+            # target = current_z + step (AirSim NED: more positive = lower)
+            target_alt = self.nav_altitude  # Default: hold cruise altitude
             if current_distance < DESCENT_NEAR_FIRE:
-                # AirSim NED: more positive Z = lower altitude (toward ground)
-                # z + DESCENT_STEP goes DOWN (was z - DESCENT_STEP which went UP!)
-                new_alt = z + DESCENT_STEP
-                target_alt = min(new_alt, DESCENT_FLOOR_Z)  # Don't go below floor
+                target_alt = min(z + DESCENT_STEP, DESCENT_FLOOR_Z)
 
             self.client.moveByVelocityZAsync(
                 vx, vy, target_alt,
@@ -490,7 +530,15 @@ class AirSimFireEnv(gym.Env):
 
         time.sleep(STEP_DURATION)
 
+        # Re-read position after sleep — drone has now moved to new location
+        x, y, z = self._get_position()
+
+        # Re-measure distance AFTER the move (not before)
+        current_distance = self._distance_to_fire()
+
         # ─── 360° Scan when very close ─────────────────────────
+        # Scan happens AFTER moving so we measure the post-move distance.
+        # This ensures fire isn't confirmed before scan photos are taken.
         scan_confirmed = False
         if current_distance < SCAN_DISTANCE:
             scan_confirmed = self._do_360_scan()
@@ -506,8 +554,7 @@ class AirSimFireEnv(gym.Env):
             terminated = True
             info["termination"] = "collision"
 
-        # Re-measure distance after move
-        current_distance = self._distance_to_fire()
+        # Progress reward (current_distance already re-measured post-move above)
         if self.prev_distance is not None:
             progress = self.prev_distance - current_distance
             reward += REWARD_PROGRESS * progress
@@ -516,13 +563,15 @@ class AirSimFireEnv(gym.Env):
         reward += REWARD_SURVIVAL
         reward += REWARD_TIME_PENALTY
 
-        # Fire confirmation: proximity, scan, or HSV
-        if not terminated and (scan_confirmed or self._check_fire_confirmed()):
+        # Fire confirmation: scan photos OR proximity ≤2m (no HSV-only confirm)
+        proximity_confirmed = current_distance <= FIRE_PROXIMITY_CONFIRM
+        if not terminated and (scan_confirmed or proximity_confirmed):
             reward += REWARD_FIRE_CONFIRMED
             terminated = True
             info["termination"] = "fire_confirmed"
             info["steps_to_confirm"] = self.step_count
-            print(f"\n  🔥 FIRE CONFIRMED at {current_distance:.1f}m!", flush=True)
+            method = "scan" if scan_confirmed else "proximity"
+            print(f"\n  🔥 FIRE CONFIRMED at {current_distance:.1f}m! (via {method})", flush=True)
 
         if self.step_count >= MAX_STEPS_PER_EPISODE:
             truncated = True
@@ -537,9 +586,10 @@ class AirSimFireEnv(gym.Env):
         })
 
         mode = "HOMING" if current_distance > HOMING_DISTANCE else "PPO"
+        z_dir = "↓" if z >= 0 else "↑"  # positive z = below origin = descending
         print(f"\r  Phase C | Step {self.step_count:3d} | "
               f"Dist: {current_distance:6.1f}m | "
-              f"Alt: {abs(z):4.1f}m | "
+              f"Z: {z:+6.1f}m{z_dir} | "
               f"Mode: {mode:6s} | "
               f"Reward: {reward:+.2f}",
               end="", flush=True)

@@ -1,0 +1,35 @@
+<div id="sector-grid">
+
+  <!-- SECTOR A -->
+  <div class="sector" id="sector-a" onclick="onSectorClick('a')">
+    <div class="sector-label">◈ Sector A</div>
+    <div class="cam-ring"><div class="cam-dot"></div></div>
+    <div class="alert-badge">SMOKE ALERT 🔥</div>
+  </div>
+
+  <!-- SECTOR B -->
+  <div class="sector" id="sector-b" onclick="onSectorClick('b')">
+    <div class="sector-label">◈ Sector B</div>
+    <div class="cam-ring"><div class="cam-dot"></div></div>
+    <div class="alert-badge">SMOKE ALERT 🔥</div>
+  </div>
+
+  <!-- SECTOR C (primary — bearing ~200°) -->
+  <div class="sector primary-sector" id="sector-c" onclick="onSectorClick('c')">
+    <div class="sector-label">◈ Sector C <span style="font-size:9px;color:rgba(255,171,0,.5);margin-left:4px">PRIMARY</span></div>
+    <div class="cam-ring"><div class="cam-dot"></div></div>
+    <div class="alert-badge">SMOKE ALERT 🔥</div>
+    <div id="idle-overlay">
+      <div class="idle-pulse"></div>
+      <div class="idle-text">Awaiting Signal</div>
+    </div>
+  </div>
+
+  <!-- SECTOR D -->
+  <div class="sector" id="sector-d" onclick="onSectorClick('d')">
+    <div class="sector-label">◈ Sector D</div>
+    <div class="cam-ring"><div class="cam-dot"></div></div>
+    <div class="alert-badge">SMOKE ALERT 🔥</div>
+  </div>
+
+</div>

@@ -1,0 +1,30 @@
+<div id="sector-c-main">
+  <div class="sc-label">◈ SECTOR C — ACTIVE</div>
+  <div class="sc-coords" id="sc-coords">Bear: —°</div>
+
+  <!-- Drone SVG -->
+  <svg id="drone-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <line x1="50" y1="50" x2="18" y2="18" stroke="#445" stroke-width="5" stroke-linecap="round"/>
+    <line x1="50" y1="50" x2="82" y2="18" stroke="#445" stroke-width="5" stroke-linecap="round"/>
+    <line x1="50" y1="50" x2="18" y2="82" stroke="#445" stroke-width="5" stroke-linecap="round"/>
+    <line x1="50" y1="50" x2="82" y2="82" stroke="#445" stroke-width="5" stroke-linecap="round"/>
+    <rect x="38" y="38" width="24" height="24" rx="4" fill="#2a3a2a" stroke="rgba(0,230,118,.5)" stroke-width="1.5"/>
+    <circle cx="50" cy="50" r="5" fill="rgba(64,196,255,.7)"/>
+    <!-- Rotors -->
+    <g class="rotor-blade" style="transform-origin:18px 18px"><ellipse cx="18" cy="18" rx="11" ry="4" fill="none" stroke="rgba(0,230,118,.7)" stroke-width="2"/></g>
+    <g class="rotor-blade" style="transform-origin:82px 18px;animation-direction:reverse"><ellipse cx="82" cy="18" rx="11" ry="4" fill="none" stroke="rgba(0,230,118,.7)" stroke-width="2"/></g>
+    <g class="rotor-blade" style="transform-origin:18px 82px;animation-direction:reverse"><ellipse cx="18" cy="82" rx="11" ry="4" fill="none" stroke="rgba(0,230,118,.7)" stroke-width="2"/></g>
+    <g class="rotor-blade" style="transform-origin:82px 82px"><ellipse cx="82" cy="82" rx="11" ry="4" fill="none" stroke="rgba(0,230,118,.7)" stroke-width="2"/></g>
+  </svg>
+
+  <!-- Fire marker pin -->
+  <div id="fire-marker">
+    <div class="fire-pin" id="fire-pin-text">🔥 FIRE DETECTED</div>
+  </div>
+
+  <!-- Fire emoji overlay on sector (shown when fire confirmed) -->
+  <div id="sector-fire-emoji">🔥</div>
+
+  <!-- Alert banner -->
+  <div id="alert-banner">🚨 SMOKE DETECTED — DRONE DISPATCHED</div>
+</div>

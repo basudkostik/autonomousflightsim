@@ -29,6 +29,57 @@ import time
 import math
 import datetime
 
+# ── Dashboard log file (dashboard_server.py watches this) ──
+_LOG_FILE = None
+
+class _TeeWriter:
+    """Writes to both the original stdout and dashboard.log."""
+    def __init__(self, original):
+        self._orig = original
+    def write(self, s):
+        self._orig.write(s)
+        if _LOG_FILE and s.strip():
+            try:
+                with open(_LOG_FILE, 'a', encoding='utf-8', errors='replace') as f:
+                    ts = datetime.datetime.now().strftime('%H:%M:%S')
+                    for line in s.splitlines():
+                        clean = line.strip()
+                        # Skip progress bar lines (contain \r or pure whitespace)
+                        if not clean or clean.startswith('\r') or '\r' in line:
+                            continue
+                        
+                        # Skip PPO training step data (Dist, Z, Mode: PPO, Reward)
+                        if "Phase C | Step" in clean or "Reward:" in clean or "Mode: PPO" in clean:
+                            continue
+                        
+                        # Skip training resets and dashed separators
+                        if "Episode" in clean or "Distance to fire:" in clean or "---" in clean:
+                            continue
+                        
+                        # Skip setup/holding logs that look too "internal"
+                        if "Holding current altitude" in clean or "Moving to nav altitude" in clean or "resetting drone" in clean:
+                            continue
+
+                        # Skip fire hint (different from FIRE CONFIRMED)
+                        if "Bearing hint:" in clean:
+                            continue
+                        
+                        # Skip Stable Baselines progress bars/stats
+                        if "it/s" in clean or "% ━" in clean or "fps" in clean:
+                            continue
+
+                        f.write(f'[{ts}] {clean}\n')
+            except Exception:
+                pass
+    def flush(self):
+        self._orig.flush()
+    def __getattr__(self, name):
+        return getattr(self._orig, name)
+
+def write_log(msg: str):
+    """Kept for backward compat — TeeWriter now handles all output."""
+    print(msg, flush=True)
+
 
 # ═══════════════════════════════════════════════════════
 # CONFIGURATION
@@ -230,9 +281,14 @@ def dispatch_drone(client, bearing):
     print("  🔽 Returning and landing...")
     print("=" * 55)
     try:
-        client.moveToZAsync(-10, 5).join()
-        client.moveToPositionAsync(0, 0, -10, 8).join()
+        # Hover to stabilize first — don't try to climb on a mountain
+        client.enableApiControl(True)
+        client.armDisarm(True)
+        client.hoverAsync().join()
+        time.sleep(2)
+        # Land from current position (don't fly back to origin on mountain terrain)
         client.landAsync().join()
+        time.sleep(2)
     except Exception:
         pass
     client.armDisarm(False)
@@ -242,19 +298,36 @@ def dispatch_drone(client, bearing):
 
 
 def main():
+    global _LOG_FILE
     output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
     os.makedirs(output_dir, exist_ok=True)
+
+    # ── Open dashboard log file ─────────────────────────
+    _LOG_FILE = os.path.join(output_dir, 'dashboard.log')
+    # Rotate: keep last 5000 lines
+    try:
+        if os.path.exists(_LOG_FILE):
+            with open(_LOG_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()[-5000:]
+            with open(_LOG_FILE, 'w', encoding='utf-8') as f:
+                f.writelines(lines)
+    except Exception:
+        pass
+
+    # Redirect ALL stdout (including imports like bearing_navigator, ppo_environment)
+    import sys
+    sys.stdout = _TeeWriter(sys.__stdout__)
 
     # ──────────────────────────────────────────────
     # 1. Connect to AirSim
     # ──────────────────────────────────────────────
-    print("=" * 55)
-    print("  🏔️  AI TOWER - CONTINUOUS MONITORING SYSTEM")
-    print("=" * 55)
-    print("Connecting to AirSim...")
+    write_log("=" * 55)
+    write_log("  🏔️  AI TOWER - CONTINUOUS MONITORING SYSTEM")
+    write_log("=" * 55)
+    write_log("Connecting to AirSim...")
     client = airsim.MultirotorClient()
     client.confirmConnection()
-    print("✅ Connected!\n")
+    write_log("✅ Connected!\n")
 
     # ──────────────────────────────────────────────
     # 2. Capture baseline frame
@@ -291,7 +364,7 @@ def main():
     try:
         while not alarm_triggered:
             # Wait for next capture
-            print(f"\n⏳ Waiting {CAPTURE_INTERVAL}s for next capture...", end="", flush=True)
+            write_log(f"\n⏳ Waiting {CAPTURE_INTERVAL}s for next capture...")
             time.sleep(CAPTURE_INTERVAL)
             frame_count += 1
 
@@ -312,11 +385,11 @@ def main():
                 prev_frame, curr_frame, CHANGE_THRESHOLD, exc_mask
             )
 
-            print(f"\r📸 Frame #{frame_count:04d} [{ts_now}] | Changed pixels: {change_area:,} / {CHANGE_AREA_MIN} | Consecutive: {consecutive_detections}/{CONSECUTIVE_DETECTIONS_REQUIRED}", end="")
+            write_log(f"📸 Frame #{frame_count:04d} [{ts_now}] | Changed pixels: {change_area:,} / {CHANGE_AREA_MIN} | Consecutive: {consecutive_detections}/{CONSECUTIVE_DETECTIONS_REQUIRED}")
 
             if change_area >= CHANGE_AREA_MIN and change_center is not None:
                 consecutive_detections += 1
-                print(f" | 🔸 Hit {consecutive_detections}/{CONSECUTIVE_DETECTIONS_REQUIRED}", end="")
+                write_log(f"🔸 Hit {consecutive_detections}/{CONSECUTIVE_DETECTIONS_REQUIRED}")
 
                 if consecutive_detections < CONSECUTIVE_DETECTIONS_REQUIRED:
                     # Not enough consecutive hits yet — don't reset prev_frame so
@@ -331,10 +404,10 @@ def main():
                 h, w = curr_frame.shape[:2]
                 bearing = calculate_bearing(cx, w, CAMERA_FOV, TOWER_YAW)
 
-                print(f"\n\n🚨🔥 ALARM! Change detected at pixel ({cx}, {cy})")
-                print(f"   Changed area : {change_area:,} pixels")
-                print(f"   Bearing      : {bearing:.2f}°")
-                print(f"   Saving 2 pre-dispatch photos...")
+                write_log(f"🚨🔥 ALARM! Change detected at pixel ({cx}, {cy})")
+                write_log(f"   Changed area : {change_area:,} pixels")
+                write_log(f"   Bearing      : {bearing:.2f}°")
+                write_log(f"   Saving pre-dispatch photos...")
 
                 # ── Photo 1: The BEFORE frame (last clear frame used as reference) ──
                 before_path = os.path.join(
@@ -387,7 +460,7 @@ def main():
 
             else:
                 consecutive_detections = 0   # reset streak on any clear frame
-                print(f" | ✅ Clear", end="")
+                write_log("✅ Clear")
                 # Update previous frame only when scene is clear (no false baselines)
                 prev_frame = curr_frame.copy()
 

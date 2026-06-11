@@ -1,0 +1,35 @@
+<div id="sidebar">
+
+  <!-- Console panel -->
+  <div id="console-panel">
+    <div id="console-header">
+      <span>Mission Console</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="indicator"></span>
+        <span style="font-size:9px;color:rgba(255,255,255,.15)">LIVE</span>
+      </div>
+    </div>
+    <div id="console-body">
+      <div class="log-line info">— System initialized. Awaiting tower signal. —</div>
+    </div>
+  </div>
+
+  <!-- Photo Gallery -->
+  <div id="gallery-section">
+    <div class="gallery-tabs">
+      <div class="gtab active" id="gtab-tower" onclick="switchTab('tower')">Tower</div>
+      <div class="gtab" id="gtab-drone" onclick="switchTab('drone')">Drone</div>
+      <div class="gtab" id="gtab-mission" onclick="switchTab('mission')">Mission</div>
+    </div>
+    <div class="gallery-content" id="gallery-body">
+      <div class="empty-gallery">📡 No images yet</div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div id="bottom-bar">
+    <button id="btn-output" onclick="openOutputFolder()">📁 Open Output Folder</button>
+    <button id="btn-collapse" onclick="collapseSectorC()">✕ Collapse</button>
+  </div>
+
+</div>

@@ -1,0 +1,8 @@
+cd autonomousflight
+source venv/Scripts/activate
+
+
+
+cd Dashboard && python dashboard_server.py
+
+python  scripts/ai_tower_monitor.py
